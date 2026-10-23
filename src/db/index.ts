@@ -3,6 +3,16 @@ import { env } from '../config/env.js';
 
 const { Pool } = pg;
 
+let useMemory = process.env.NODE_ENV === 'test';
+
+export function isMemoryDb(): boolean {
+  return useMemory;
+}
+
+export function setMemoryDb(enabled: boolean) {
+  useMemory = enabled;
+}
+
 export const pool = new Pool({
   connectionString: env.DATABASE_URL,
   max: 20,
@@ -11,7 +21,9 @@ export const pool = new Pool({
 });
 
 pool.on('error', (err) => {
-  console.error('❌ Erro inesperado no pool do PostgreSQL:', err);
+  if (!useMemory) {
+    console.error('❌ Erro inesperado no pool do PostgreSQL:', err);
+  }
 });
 
 export async function query<T extends pg.QueryResultRow = any>(
@@ -22,6 +34,9 @@ export async function query<T extends pg.QueryResultRow = any>(
 }
 
 export async function checkConnection(): Promise<boolean> {
+  if (useMemory) {
+    return true;
+  }
   try {
     const res = await pool.query('SELECT 1 as healthy');
     return res.rows[0]?.healthy === 1;

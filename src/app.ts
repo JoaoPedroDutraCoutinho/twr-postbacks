@@ -14,7 +14,6 @@ export function buildApp(): FastifyInstance {
     logger: {
       level: process.env.NODE_ENV === 'test' ? 'silent' : 'info',
     },
-    disableRequestLogging: false,
   });
 
   // Captura o corpo bruto (Buffer) para validação de assinatura HMAC

@@ -1,4 +1,5 @@
-import { query } from '../db/index.js';
+import { isMemoryDb, query } from '../db/index.js';
+import { memoryDb } from '../db/memory.js';
 import { WebhookPayload } from '../schemas/webhook.schema.js';
 
 export interface ProcessWebhookResult {
@@ -10,6 +11,30 @@ export interface ProcessWebhookResult {
 export class WebhookService {
   async processEvent(payload: WebhookPayload, rawPayload: any): Promise<ProcessWebhookResult> {
     const normalizedEventType = payload.event_type.replace('sale.', '');
+
+    // Se estiver em modo de teste ou banco em memória
+    if (isMemoryDb()) {
+      const memResult = memoryDb.insertEvent({
+        platform: payload.platform,
+        event_id: payload.event_id,
+        event_type: normalizedEventType,
+        order_id: payload.order_id,
+        product_id: payload.product.id,
+        product_name: payload.product.name,
+        currency: payload.currency,
+        amount_cents: payload.amount_cents,
+        customer_email: payload.customer.email,
+        customer_name: payload.customer.name,
+        payload: rawPayload,
+        event_created_at: new Date(payload.event_created_at),
+      });
+
+      return {
+        isNew: memResult.rowCount > 0,
+        eventId: payload.event_id,
+        id: memResult.rows[0]?.id,
+      };
+    }
 
     const insertSql = `
       INSERT INTO sale_events (

@@ -1,4 +1,5 @@
-import { query } from '../db/index.js';
+import { isMemoryDb, query } from '../db/index.js';
+import { memoryDb } from '../db/memory.js';
 import {
   CurrencySummary,
   GroupedSummary,
@@ -12,6 +13,25 @@ export class ReportService {
     const fromDate = params.from
       ? new Date(params.from)
       : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 dias atrás
+
+    // Se estiver em modo de teste ou banco em memória
+    if (isMemoryDb()) {
+      const currencies = memoryDb.getTotals(fromDate, toDate);
+      const groups = params.group_by
+        ? memoryDb.getGrouped(fromDate, toDate, params.group_by)
+        : undefined;
+
+      return {
+        period: {
+          from: fromDate.toISOString(),
+          to: toDate.toISOString(),
+          timezone: 'UTC',
+        },
+        group_by: params.group_by,
+        currencies,
+        groups,
+      };
+    }
 
     // 1. Totais consolidados por moeda
     const totalsSql = `
