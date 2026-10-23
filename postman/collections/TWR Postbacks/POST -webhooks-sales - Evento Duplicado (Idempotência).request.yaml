@@ -1,0 +1,43 @@
+$kind: http-request
+name: POST /webhooks/sales - Evento Duplicado (Idempotência)
+url: "{{baseUrl}}/webhooks/sales"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "platform": "kiwify",
+      "event_id": "evt_fixed_duplicate_test",
+      "event_type": "sale.approved",
+      "order_id": "ord_dup_fixed",
+      "product": {
+        "id": "prod_saas",
+        "name": "Plano Pro TWR"
+      },
+      "currency": "BRL",
+      "amount_cents": 15000,
+      "customer": {
+        "email": "duplicado@twrplay.com",
+        "name": "Carlos Souza"
+      }
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      const body = pm.request.body.raw;
+      const sig = CryptoJS.HmacSHA256(body, pm.environment.get("webhookSecret")).toString(CryptoJS.enc.Hex);
+      pm.request.headers.upsert({ key: "X-Signature", value: sig });
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test("Status code 200 (se já existe) ou 201 (primeira execução)", function () {
+          pm.expect([200, 201]).to.include(pm.response.code);
+      });
+      pm.test("Estrutura de resposta válida", function () {
+          var json = pm.response.json();
+          pm.expect(json.eventId).to.eql("evt_fixed_duplicate_test");
+      });
+    language: text/javascript
+order: 3000

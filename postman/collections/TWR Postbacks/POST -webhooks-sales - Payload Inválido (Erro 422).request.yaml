@@ -1,0 +1,33 @@
+$kind: http-request
+name: POST /webhooks/sales - Payload Inválido (Erro 422)
+url: "{{baseUrl}}/webhooks/sales"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "platform": "kiwify",
+      "event_type": "sale.approved",
+      "amount_cents": -100
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      const body = pm.request.body.raw;
+      const sig = CryptoJS.HmacSHA256(body, pm.environment.get("webhookSecret")).toString(CryptoJS.enc.Hex);
+      pm.request.headers.upsert({ key: "X-Signature", value: sig });
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test("Status code é 422 Unprocessable Entity", function () {
+          pm.response.to.have.status(422);
+      });
+      pm.test("Retorna detalhamento das validações Zod", function () {
+          var json = pm.response.json();
+          pm.expect(json.error).to.eql("Unprocessable Entity");
+          pm.expect(json.issues).to.be.an("object");
+      });
+    language: text/javascript
+order: 4000
