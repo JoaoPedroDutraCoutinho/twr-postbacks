@@ -1,4 +1,5 @@
 import Fastify, { FastifyError, FastifyInstance } from 'fastify';
+import crypto from 'node:crypto';
 import { healthRoutes } from './routes/health.routes.js';
 import { reportRoutes } from './routes/report.routes.js';
 import { webhookRoutes } from './routes/webhook.routes.js';
@@ -14,6 +15,16 @@ export function buildApp(): FastifyInstance {
     logger: {
       level: process.env.NODE_ENV === 'test' ? 'silent' : 'info',
     },
+    // Observabilidade: Correlation ID / Request ID único por requisição
+    requestIdHeader: 'x-request-id',
+    genReqId: (req) =>
+      (req.headers['x-request-id'] as string) ||
+      `req_${crypto.randomBytes(6).toString('hex')}`,
+  });
+
+  // Retorna o x-request-id no cabeçalho de resposta para rastreamento distribuído
+  app.addHook('onSend', async (request, reply) => {
+    reply.header('x-request-id', request.id);
   });
 
   // Captura o corpo bruto (Buffer) para validação de assinatura HMAC
@@ -55,6 +66,7 @@ export function buildApp(): FastifyInstance {
       statusCode,
       error: error.name || 'InternalServerError',
       message: error.message || 'Erro interno no processamento',
+      requestId: request.id,
     });
   });
 
