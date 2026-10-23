@@ -3,7 +3,8 @@ import { env } from '../config/env.js';
 
 const { Pool } = pg;
 
-let useMemory = process.env.NODE_ENV === 'test';
+let useMemory =
+  process.env.NODE_ENV === 'test' || process.env.USE_MEMORY_DB === 'true';
 
 export function isMemoryDb(): boolean {
   return useMemory;
