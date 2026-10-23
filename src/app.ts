@@ -1,5 +1,6 @@
 import Fastify, { FastifyError, FastifyInstance } from 'fastify';
 import { healthRoutes } from './routes/health.routes.js';
+import { reportRoutes } from './routes/report.routes.js';
 import { webhookRoutes } from './routes/webhook.routes.js';
 
 declare module 'fastify' {
@@ -41,6 +42,7 @@ export function buildApp(): FastifyInstance {
   // Registro de rotas
   app.register(healthRoutes);
   app.register(webhookRoutes);
+  app.register(reportRoutes);
 
   // Tratador global de erros
   app.setErrorHandler((error: FastifyError, request, reply) => {
