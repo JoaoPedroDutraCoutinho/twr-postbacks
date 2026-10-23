@@ -1,0 +1,297 @@
+{
+  "info": {
+    "_postman_id": "7d9eb02a-postman-twr-collection",
+    "name": "TWR Postbacks",
+    "description": "Coleção de testes da API de Recepção de Webhooks e Relatórios de Vendas (Desafio TWR)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code é 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Serviço e banco operacionais\", function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.status).to.eql(\"ok\");",
+              "    pm.expect(json.database).to.eql(\"connected\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "POST /webhooks/sales - Venda Aprovada (Novo Evento)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"platform\": \"kiwify\",\n  \"event_id\": \"{{eventId}}\",\n  \"event_type\": \"sale.approved\",\n  \"order_id\": \"ord_1001\",\n  \"product\": {\n    \"id\": \"prod_saas\",\n    \"name\": \"Plano Pro TWR\"\n  },\n  \"currency\": \"BRL\",\n  \"amount_cents\": 29700,\n  \"customer\": {\n    \"email\": \"comprador@twrplay.com\",\n    \"name\": \"João da Silva\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/webhooks/sales",
+          "host": ["{{baseUrl}}"],
+          "path": ["webhooks", "sales"]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.variables.set(\"eventId\", \"evt_\" + Date.now());",
+              "const body = pm.variables.replaceIn(pm.request.body.raw);",
+              "const sig = CryptoJS.HmacSHA256(body, pm.environment.get(\"webhookSecret\")).toString(CryptoJS.enc.Hex);",
+              "pm.request.headers.upsert({ key: \"X-Signature\", value: sig });"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code é 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "pm.test(\"Status created e eventId correto\", function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.status).to.eql(\"created\");",
+              "    pm.expect(json.eventId).to.eql(pm.variables.get(\"eventId\"));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "POST /webhooks/sales - Evento Duplicado (Idempotência)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"platform\": \"kiwify\",\n  \"event_id\": \"evt_fixed_duplicate_test\",\n  \"event_type\": \"sale.approved\",\n  \"order_id\": \"ord_dup_fixed\",\n  \"product\": {\n    \"id\": \"prod_saas\",\n    \"name\": \"Plano Pro TWR\"\n  },\n  \"currency\": \"BRL\",\n  \"amount_cents\": 15000,\n  \"customer\": {\n    \"email\": \"duplicado@twrplay.com\",\n    \"name\": \"Carlos Souza\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/webhooks/sales",
+          "host": ["{{baseUrl}}"],
+          "path": ["webhooks", "sales"]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.request.body.raw;",
+              "const sig = CryptoJS.HmacSHA256(body, pm.environment.get(\"webhookSecret\")).toString(CryptoJS.enc.Hex);",
+              "pm.request.headers.upsert({ key: \"X-Signature\", value: sig });"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code 200 (se já existe) ou 201 (primeira execução)\", function () {",
+              "    pm.expect([200, 201]).to.include(pm.response.code);",
+              "});",
+              "pm.test(\"Estrutura de resposta válida\", function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.eventId).to.eql(\"evt_fixed_duplicate_test\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "POST /webhooks/sales - Payload Inválido (Erro 422)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"platform\": \"kiwify\",\n  \"event_type\": \"sale.approved\",\n  \"amount_cents\": -100\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/webhooks/sales",
+          "host": ["{{baseUrl}}"],
+          "path": ["webhooks", "sales"]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.request.body.raw;",
+              "const sig = CryptoJS.HmacSHA256(body, pm.environment.get(\"webhookSecret\")).toString(CryptoJS.enc.Hex);",
+              "pm.request.headers.upsert({ key: \"X-Signature\", value: sig });"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code é 422 Unprocessable Entity\", function () {",
+              "    pm.response.to.have.status(422);",
+              "});",
+              "pm.test(\"Retorna detalhamento das validações Zod\", function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.error).to.eql(\"Unprocessable Entity\");",
+              "    pm.expect(json.issues).to.be.an(\"object\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "POST /webhooks/sales - Assinatura Inválida (Erro 401)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Signature",
+            "value": "bad_signature_hash_0123456789abcdef"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"platform\": \"kiwify\",\n  \"event_id\": \"evt_fake\",\n  \"event_type\": \"sale.approved\",\n  \"order_id\": \"ord_fake\",\n  \"product\": { \"id\": \"p1\", \"name\": \"P1\" },\n  \"currency\": \"BRL\",\n  \"amount_cents\": 1000,\n  \"customer\": { \"email\": \"fake@teste.com\" }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/webhooks/sales",
+          "host": ["{{baseUrl}}"],
+          "path": ["webhooks", "sales"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code é 401 Unauthorized\", function () {",
+              "    pm.response.to.have.status(401);",
+              "});",
+              "pm.test(\"Retorna mensagem de erro de autenticação\", function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.error).to.eql(\"Unauthorized\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GET /reports/sales - Relatório Geral",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/reports/sales",
+          "host": ["{{baseUrl}}"],
+          "path": ["reports", "sales"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code é 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Retorna período e lista de moedas\", function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.period).to.be.an(\"object\");",
+              "    pm.expect(json.currencies).to.be.an(\"array\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GET /reports/sales?group_by=product - Agrupado por Produto",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/reports/sales?group_by=product",
+          "host": ["{{baseUrl}}"],
+          "path": ["reports", "sales"],
+          "query": [
+            {
+              "key": "group_by",
+              "value": "product"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code é 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Retorna array groups\", function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.groups).to.be.an(\"array\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
