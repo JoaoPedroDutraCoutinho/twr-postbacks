@@ -6,7 +6,7 @@ Aplicação de alta performance em **TypeScript** e **Fastify** para recepção 
 
 ## 🌐 URL Pública da Aplicação
 
-- **Base URL:** `https://twr-postbacks.onrender.com` *(substituir pela URL após deploy ativo)*
+- **Base URL:** 
 - **Health Check:** `GET https://twr-postbacks.onrender.com/health`
 - **Relatório de Vendas:** `GET https://twr-postbacks.onrender.com/reports/sales`
 
