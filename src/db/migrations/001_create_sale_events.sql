@@ -1,4 +1,3 @@
--- Tabela de log imutável de eventos de venda (Append-Only)
 CREATE TABLE IF NOT EXISTS sale_events (
     id BIGSERIAL PRIMARY KEY,
     platform VARCHAR(50) NOT NULL,
@@ -14,12 +13,10 @@ CREATE TABLE IF NOT EXISTS sale_events (
     payload JSONB NOT NULL,
     event_created_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    
-    -- Constraint central de idempotência
+
     CONSTRAINT uk_platform_event UNIQUE (platform, event_id)
 );
 
--- Índices otimizados para agregação de relatórios analíticos
 CREATE INDEX IF NOT EXISTS idx_sale_events_order_id ON sale_events(order_id);
 CREATE INDEX IF NOT EXISTS idx_sale_events_reporting ON sale_events(event_type, currency, event_created_at);
 CREATE INDEX IF NOT EXISTS idx_sale_events_product_id ON sale_events(product_id);

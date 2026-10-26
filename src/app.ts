@@ -22,7 +22,6 @@ export function buildApp(): FastifyInstance {
       `req_${crypto.randomBytes(6).toString('hex')}`,
   });
 
-  // Retorna o x-request-id no cabeçalho de resposta para rastreamento distribuído
   app.addHook('onSend', async (request, reply) => {
     reply.header('x-request-id', request.id);
   });
@@ -42,19 +41,16 @@ export function buildApp(): FastifyInstance {
         const parsed = JSON.parse(rawBuffer.toString('utf-8'));
         done(null, parsed);
       } catch (err: any) {
-        // Payload JSON malformado deve retornar 422 conforme a spec
         err.statusCode = 422;
         done(err, undefined);
       }
     }
   );
 
-  // Registro de rotas
   app.register(healthRoutes);
   app.register(webhookRoutes);
   app.register(reportRoutes);
 
-  // Tratador global de erros
   app.setErrorHandler((error: FastifyError, request, reply) => {
     const statusCode = error.statusCode || 500;
 

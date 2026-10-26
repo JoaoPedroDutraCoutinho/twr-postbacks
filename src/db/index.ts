@@ -23,7 +23,7 @@ export const pool = new Pool({
 
 pool.on('error', (err) => {
   if (!useMemory) {
-    console.error('❌ Erro inesperado no pool do PostgreSQL:', err);
+    console.error('Erro inesperado no pool do PostgreSQL:', err);
   }
 });
 

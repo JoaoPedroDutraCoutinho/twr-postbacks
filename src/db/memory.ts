@@ -25,7 +25,6 @@ class MemoryDatabase {
   }
 
   insertEvent(row: Omit<SaleEventRow, 'id' | 'created_at'>): { rowCount: number; rows: { id: string }[] } {
-    // Constraint de idempotência: UNIQUE (platform, event_id)
     const exists = this.events.some(
       (e) => e.platform === row.platform && e.event_id === row.event_id
     );

@@ -12,7 +12,7 @@ export class ReportService {
     const toDate = params.to ? new Date(params.to) : new Date();
     const fromDate = params.from
       ? new Date(params.from)
-      : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 dias atrás
+      : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     // Se estiver em modo de teste ou banco em memória
     if (isMemoryDb()) {
@@ -62,7 +62,6 @@ export class ReportService {
       refunds_count: Number(row.refunds_count),
     }));
 
-    // 2. Agrupamentos opcionais (day | product | platform)
     let groups: GroupedSummary[] | undefined;
 
     if (params.group_by) {
