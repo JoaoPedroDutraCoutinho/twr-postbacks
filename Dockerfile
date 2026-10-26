@@ -11,7 +11,6 @@ COPY src/ ./src/
 
 RUN npm run build
 
-# Estágio 2: Imagem final enxuta para produção
 FROM node:22-alpine AS runner
 
 WORKDIR /app
