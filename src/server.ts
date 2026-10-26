@@ -2,27 +2,27 @@ import { buildApp } from './app.js';
 import { env } from './config/env.js';
 import { runMigrations } from './db/migrate.js';
 
-const app = buildApp();
+const aplicacao = buildApp();
 
-const start = async () => {
+const iniciar_servidor = async () => {
   try {
     if (process.env.NODE_ENV !== 'test') {
       try {
         await runMigrations();
-      } catch (migrationErr) {
-        app.log.warn(
-          { err: migrationErr },
-          'Não foi possível rodar as migrações na inicialização (PostgreSQL pode estar iniciando):'
+      } catch (erro_migracao) {
+        aplicacao.log.warn(
+          { err: erro_migracao },
+          '[AVISO] Nao foi possivel rodar as migracoes na inicializacao:'
         );
       }
     }
 
-    const address = await app.listen({ port: env.PORT, host: '0.0.0.0' });
-    app.log.info(`Servidor rodando em ${address}`);
-  } catch (err) {
-    app.log.error(err);
+    const endereco = await aplicacao.listen({ port: env.PORT, host: '0.0.0.0' });
+    aplicacao.log.info(`[INFO] Servidor rodando em ${endereco}`);
+  } catch (erro) {
+    aplicacao.log.error(erro);
     process.exit(1);
   }
 };
 
-start();
+iniciar_servidor();

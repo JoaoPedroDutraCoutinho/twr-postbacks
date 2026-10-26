@@ -4,8 +4,8 @@ import { env } from '../src/config/env.js';
 import { memoryDb } from '../src/db/memory.js';
 import { generateHmacSignature } from '../src/utils/hmac.js';
 
-describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
-  const app = buildApp();
+describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
+  const aplicacao = buildApp();
 
   beforeEach(() => {
     memoryDb.reset();
@@ -16,32 +16,32 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
   });
 
   // Helper para assinar e disparar webhook
-  async function postWebhook(payload: any, secret = env.WEBHOOK_SECRET, customSignature?: string) {
-    const rawBody = JSON.stringify(payload);
-    const signature = customSignature ?? generateHmacSignature(rawBody, secret);
+  async function enviar_webhook(dados_payload: any, segredo = env.WEBHOOK_SECRET, assinatura_customizada?: string) {
+    const corpo_bruto = JSON.stringify(dados_payload);
+    const assinatura = assinatura_customizada ?? generateHmacSignature(corpo_bruto, segredo);
 
-    return app.inject({
+    return aplicacao.inject({
       method: 'POST',
       url: '/webhooks/sales',
       headers: {
         'content-type': 'application/json',
-        'x-signature': signature,
+        'x-signature': assinatura,
       },
-      payload: rawBody,
+      payload: corpo_bruto,
     });
   }
 
-  // Helper para buscar relatório
-  async function getReport(query = '') {
-    return app.inject({
+  // Helper para buscar relatorio
+  async function buscar_relatorio(parametros_consulta = '') {
+    return aplicacao.inject({
       method: 'GET',
-      url: `/reports/sales${query ? `?${query}` : ''}`,
+      url: `/reports/sales${parametros_consulta ? `?${parametros_consulta}` : ''}`,
     });
   }
 
   // CASO 1: Evento duplicado conta uma venda
-  it('1. Evento duplicado retorna 200 e conta apenas uma venda no relatório', async () => {
-    const payload = {
+  it('1. Evento duplicado retorna 200 e conta apenas uma venda no relatorio', async () => {
+    const dados_venda = {
       platform: 'kiwify',
       event_id: 'evt_dup_101',
       event_type: 'sale.approved',
@@ -53,22 +53,22 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
     };
 
     // Primeiro envio: Novo evento -> 201 Created
-    const res1 = await postWebhook(payload);
-    expect(res1.statusCode).toBe(201);
-    expect(res1.json().status).toBe('created');
+    const resposta_1 = await enviar_webhook(dados_venda);
+    expect(resposta_1.statusCode).toBe(201);
+    expect(resposta_1.json().status).toBe('created');
 
-    // Segundo envio idêntico: Duplicado -> 200 OK (idempotente)
-    const res2 = await postWebhook(payload);
-    expect(res2.statusCode).toBe(200);
-    expect(res2.json().status).toBe('duplicate');
+    // Segundo envio identico: Duplicado -> 200 OK (idempotente)
+    const resposta_2 = await enviar_webhook(dados_venda);
+    expect(resposta_2.statusCode).toBe(200);
+    expect(resposta_2.json().status).toBe('duplicate');
 
-    // Validação no relatório: Apenas 1 venda e 15000 centavos
-    const reportRes = await getReport();
-    expect(reportRes.statusCode).toBe(200);
-    const body = reportRes.json();
+    // Validacao no relatorio: Apenas 1 venda e 15000 centavos
+    const resposta_relatorio = await buscar_relatorio();
+    expect(resposta_relatorio.statusCode).toBe(200);
+    const corpo_relatorio = resposta_relatorio.json();
 
-    expect(body.currencies).toHaveLength(1);
-    expect(body.currencies[0]).toEqual({
+    expect(corpo_relatorio.currencies).toHaveLength(1);
+    expect(corpo_relatorio.currencies[0]).toEqual({
       currency: 'BRL',
       gross_cents: 15000,
       refunded_cents: 0,
@@ -78,9 +78,9 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
     });
   });
 
-  // CASO 2: 20 envios idênticos em paralelo contam uma venda
-  it('2. 20 envios concorrentes idênticos registram exatamente uma venda', async () => {
-    const payload = {
+  // CASO 2: 20 envios identicos em paralelo contam uma venda
+  it('2. 20 envios concorrentes identicos registram exatamente uma venda', async () => {
+    const dados_venda = {
       platform: 'hotmart',
       event_id: 'evt_parallel_999',
       event_type: 'sale.approved',
@@ -91,27 +91,27 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
       customer: { email: 'concorrente@teste.com' },
     };
 
-    // Dispara 20 requisições simultâneas
-    const promises = Array.from({ length: 20 }, () => postWebhook(payload));
-    const responses = await Promise.all(promises);
+    // Dispara 20 requisicoes simultaneas
+    const lista_promessas = Array.from({ length: 20 }, () => enviar_webhook(dados_venda));
+    const lista_respostas = await Promise.all(lista_promessas);
 
-    const status201Count = responses.filter((r) => r.statusCode === 201).length;
-    const status200Count = responses.filter((r) => r.statusCode === 200).length;
+    const contagem_status_201 = lista_respostas.filter((r) => r.statusCode === 201).length;
+    const contagem_status_200 = lista_respostas.filter((r) => r.statusCode === 200).length;
 
-    // Exatamente uma inserção deve ter sido realizada com sucesso (201) e 19 ignoradas (200)
-    expect(status201Count).toBe(1);
-    expect(status200Count).toBe(19);
+    // Exatamente uma insercao deve ter sido realizada com sucesso (201) e 19 ignoradas (200)
+    expect(contagem_status_201).toBe(1);
+    expect(contagem_status_200).toBe(19);
 
-    const reportRes = await getReport();
-    const brlSummary = reportRes.json().currencies.find((c: any) => c.currency === 'BRL');
-    expect(brlSummary.sales_count).toBe(1);
-    expect(brlSummary.gross_cents).toBe(5000);
+    const resposta_relatorio = await buscar_relatorio();
+    const resumo_brl = resposta_relatorio.json().currencies.find((c: any) => c.currency === 'BRL');
+    expect(resumo_brl.sales_count).toBe(1);
+    expect(resumo_brl.gross_cents).toBe(5000);
   });
 
-  // CASO 3: Reembolso antes da aprovação gera o mesmo relatório final
-  it('3. Reembolso recebido antes ou depois da aprovação gera o mesmo resultado financeiro', async () => {
-    // Cenário A: Reembolso chega antes da aprovação (out-of-order)
-    const refundOrderA = {
+  // CASO 3: Reembolso antes da aprovacao gera o mesmo relatorio final
+  it('3. Reembolso recebido antes ou depois da aprovacao gera o mesmo resultado financeiro', async () => {
+    // Cenario A: Reembolso chega antes da aprovacao (out-of-order)
+    const reembolso_pedido_a = {
       platform: 'kiwify',
       event_id: 'evt_refund_order_a',
       event_type: 'sale.refunded',
@@ -122,7 +122,7 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
       customer: { email: 'cliente_a@teste.com' },
     };
 
-    const approveOrderA = {
+    const aprovacao_pedido_a = {
       platform: 'kiwify',
       event_id: 'evt_approved_order_a',
       event_type: 'sale.approved',
@@ -133,17 +133,17 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
       customer: { email: 'cliente_a@teste.com' },
     };
 
-    // 1º Reembolso -> 201
-    const resRefund = await postWebhook(refundOrderA);
-    expect(resRefund.statusCode).toBe(201);
+    // 1o Reembolso -> 201
+    const res_reembolso = await enviar_webhook(reembolso_pedido_a);
+    expect(res_reembolso.statusCode).toBe(201);
 
-    // 2º Aprovação posterior -> 201
-    const resApprove = await postWebhook(approveOrderA);
-    expect(resApprove.statusCode).toBe(201);
+    // 2o Aprovacao posterior -> 201
+    const res_aprovacao = await enviar_webhook(aprovacao_pedido_a);
+    expect(res_aprovacao.statusCode).toBe(201);
 
-    // Relatório final: gross = 20000, refunded = 20000, net = 0
-    const reportRes = await getReport();
-    const brl = reportRes.json().currencies.find((c: any) => c.currency === 'BRL');
+    // Relatorio final: gross = 20000, refunded = 20000, net = 0
+    const resposta_relatorio = await buscar_relatorio();
+    const brl = resposta_relatorio.json().currencies.find((c: any) => c.currency === 'BRL');
 
     expect(brl.gross_cents).toBe(20000);
     expect(brl.refunded_cents).toBe(20000);
@@ -152,38 +152,38 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
     expect(brl.refunds_count).toBe(1);
   });
 
-  // CASO 4: Payload inválido retorna 422
-  it('4. Payload malformado ou campos obrigatórios faltantes retornam 422', async () => {
+  // CASO 4: Payload invalido retorna 422
+  it('4. Payload malformado ou campos obrigatorios faltantes retornam 422', async () => {
     // Faltando platform e amount_cents negativo
-    const invalidPayload = {
+    const payload_invalido = {
       event_id: 'evt_inv_1',
       event_type: 'sale.approved',
-      amount_cents: -500, // Inválido: não pode ser negativo
+      amount_cents: -500, // Invalido: nao pode ser negativo
     };
 
-    const res = await postWebhook(invalidPayload);
-    expect(res.statusCode).toBe(422);
-    expect(res.json().error).toBe('Unprocessable Entity');
-    expect(res.json().issues).toBeDefined();
+    const resposta = await enviar_webhook(payload_invalido);
+    expect(resposta.statusCode).toBe(422);
+    expect(resposta.json().error).toBe('Unprocessable Entity');
+    expect(resposta.json().issues).toBeDefined();
 
     // Payload com JSON quebrado
-    const rawBrokenJson = '{ "platform": "kiwify", invalid }';
-    const brokenSig = generateHmacSignature(rawBrokenJson, env.WEBHOOK_SECRET);
-    const brokenRes = await app.inject({
+    const json_bruto_quebrado = '{ "platform": "kiwify", invalid }';
+    const assinatura_quebrada = generateHmacSignature(json_bruto_quebrado, env.WEBHOOK_SECRET);
+    const resposta_quebrada = await aplicacao.inject({
       method: 'POST',
       url: '/webhooks/sales',
       headers: {
         'content-type': 'application/json',
-        'x-signature': brokenSig,
+        'x-signature': assinatura_quebrada,
       },
-      payload: rawBrokenJson,
+      payload: json_bruto_quebrado,
     });
-    expect(brokenRes.statusCode).toBe(422);
+    expect(resposta_quebrada.statusCode).toBe(422);
   });
 
   // CASO 5: Assinatura errada retorna 401
   it('5. Assinatura HMAC incorreta ou ausente retorna 401 Unauthorized', async () => {
-    const payload = {
+    const dados_venda = {
       platform: 'kiwify',
       event_id: 'evt_sec_1',
       event_type: 'sale.approved',
@@ -195,26 +195,26 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
     };
 
     // Assinatura gerada com segredo errado
-    const wrongSigRes = await postWebhook(payload, 'wrong_secret_123456');
-    expect(wrongSigRes.statusCode).toBe(401);
-    expect(wrongSigRes.json().error).toBe('Unauthorized');
+    const resposta_assinatura_errada = await enviar_webhook(dados_venda, 'wrong_secret_123456');
+    expect(resposta_assinatura_errada.statusCode).toBe(401);
+    expect(resposta_assinatura_errada.json().error).toBe('Unauthorized');
 
     // Sem header X-Signature
-    const noSigRes = await app.inject({
+    const resposta_sem_assinatura = await aplicacao.inject({
       method: 'POST',
       url: '/webhooks/sales',
       headers: {
         'content-type': 'application/json',
       },
-      payload: JSON.stringify(payload),
+      payload: JSON.stringify(dados_venda),
     });
-    expect(noSigRes.statusCode).toBe(401);
+    expect(resposta_sem_assinatura.statusCode).toBe(401);
   });
 
-  // CASO 6: Duas moedas não se misturam
-  it('6. Transações em moedas distintas são totalizadas separadamente sem se misturar', async () => {
+  // CASO 6: Duas moedas nao se misturam
+  it('6. Transacoes em moedas distintas sao totalizadas separadamente sem se misturar', async () => {
     // Venda em BRL (R$ 100,00)
-    await postWebhook({
+    await enviar_webhook({
       platform: 'kiwify',
       event_id: 'evt_brl_1',
       event_type: 'sale.approved',
@@ -226,7 +226,7 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
     });
 
     // Venda em USD ($ 50.00)
-    await postWebhook({
+    await enviar_webhook({
       platform: 'stripe',
       event_id: 'evt_usd_1',
       event_type: 'sale.approved',
@@ -237,9 +237,9 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
       customer: { email: 'us@teste.com' },
     });
 
-    const reportRes = await getReport();
-    expect(reportRes.statusCode).toBe(200);
-    const { currencies } = reportRes.json();
+    const resposta_relatorio = await buscar_relatorio();
+    expect(resposta_relatorio.statusCode).toBe(200);
+    const { currencies } = resposta_relatorio.json();
 
     expect(currencies).toHaveLength(2);
 
@@ -266,19 +266,19 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
   });
 
   // Teste Adicional: Health check
-  it('GET /health retorna 200 e status saudável', async () => {
-    const res = await app.inject({
+  it('GET /health retorna 200 e status saudavel', async () => {
+    const resposta = await aplicacao.inject({
       method: 'GET',
       url: '/health',
     });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().status).toBe('ok');
-    expect(res.json().database).toBe('connected');
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json().status).toBe('ok');
+    expect(resposta.json().database).toBe('connected');
   });
 
   // Teste Adicional: Agrupamento por produto e plataforma
   it('GET /reports/sales com group_by=product agrupa corretamente', async () => {
-    await postWebhook({
+    await enviar_webhook({
       platform: 'kiwify',
       event_id: 'evt_group_1',
       event_type: 'sale.approved',
@@ -289,7 +289,7 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
       customer: { email: 'a@teste.com' },
     });
 
-    await postWebhook({
+    await enviar_webhook({
       platform: 'kiwify',
       event_id: 'evt_group_2',
       event_type: 'sale.approved',
@@ -300,9 +300,9 @@ describe('Suíte de Testes Core: Receptor de Postbacks & Relatórios', () => {
       customer: { email: 'b@teste.com' },
     });
 
-    const reportRes = await getReport('group_by=product');
-    expect(reportRes.statusCode).toBe(200);
-    const { groups } = reportRes.json();
+    const resposta_relatorio = await buscar_relatorio('group_by=product');
+    expect(resposta_relatorio.statusCode).toBe(200);
+    const { groups } = resposta_relatorio.json();
 
     expect(groups).toHaveLength(2);
     expect(groups.some((g: any) => g.group_key === 'prod_alpha' && g.gross_cents === 8000)).toBe(true);

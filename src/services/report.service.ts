@@ -8,33 +8,33 @@ import {
 } from '../schemas/report.schema.js';
 
 export class ReportService {
-  async getSalesReport(params: ReportQueryParams): Promise<SalesReportResponse> {
-    const toDate = params.to ? new Date(params.to) : new Date();
-    const fromDate = params.from
-      ? new Date(params.from)
-      : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+  async obter_relatorio_vendas(parametros: ReportQueryParams): Promise<SalesReportResponse> {
+    const data_fim = parametros.to ? new Date(parametros.to) : new Date();
+    const data_inicio = parametros.from
+      ? new Date(parametros.from)
+      : new Date(data_fim.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 dias atras
 
-    // Se estiver em modo de teste ou banco em memória
+    // Se estiver em modo de teste ou banco em memoria
     if (isMemoryDb()) {
-      const currencies = memoryDb.getTotals(fromDate, toDate);
-      const groups = params.group_by
-        ? memoryDb.getGrouped(fromDate, toDate, params.group_by)
+      const moedas_consolidadas = memoryDb.obter_totais(data_inicio, data_fim);
+      const grupos_consolidados = parametros.group_by
+        ? memoryDb.obter_agrupados(data_inicio, data_fim, parametros.group_by)
         : undefined;
 
       return {
         period: {
-          from: fromDate.toISOString(),
-          to: toDate.toISOString(),
+          from: data_inicio.toISOString(),
+          to: data_fim.toISOString(),
           timezone: 'UTC',
         },
-        group_by: params.group_by,
-        currencies,
-        groups,
+        group_by: parametros.group_by,
+        currencies: moedas_consolidadas,
+        groups: grupos_consolidados,
       };
     }
 
     // 1. Totais consolidados por moeda
-    const totalsSql = `
+    const sql_totais = `
       SELECT
         currency,
         COALESCE(SUM(CASE WHEN event_type = 'approved' THEN amount_cents ELSE 0 END), 0)::BIGINT AS gross_cents,
@@ -51,24 +51,25 @@ export class ReportService {
       ORDER BY currency ASC;
     `;
 
-    const totalsResult = await query(totalsSql, [fromDate, toDate]);
+    const resultado_totais = await query(sql_totais, [data_inicio, data_fim]);
 
-    const currencies: CurrencySummary[] = totalsResult.rows.map((row) => ({
-      currency: row.currency,
-      gross_cents: Number(row.gross_cents),
-      refunded_cents: Number(row.refunded_cents),
-      net_cents: Number(row.net_cents),
-      sales_count: Number(row.sales_count),
-      refunds_count: Number(row.refunds_count),
+    const currencies: CurrencySummary[] = resultado_totais.rows.map((linha) => ({
+      currency: linha.currency,
+      gross_cents: Number(linha.gross_cents),
+      refunded_cents: Number(linha.refunded_cents),
+      net_cents: Number(linha.net_cents),
+      sales_count: Number(linha.sales_count),
+      refunds_count: Number(linha.refunds_count),
     }));
 
+    // 2. Agrupamentos opcionais (day | product | platform)
     let groups: GroupedSummary[] | undefined;
 
-    if (params.group_by) {
-      let groupSql = '';
+    if (parametros.group_by) {
+      let sql_agrupamento = '';
 
-      if (params.group_by === 'day') {
-        groupSql = `
+      if (parametros.group_by === 'day') {
+        sql_agrupamento = `
           SELECT
             TO_CHAR(DATE_TRUNC('day', event_created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS group_key,
             currency,
@@ -85,8 +86,8 @@ export class ReportService {
           GROUP BY group_key, currency
           ORDER BY group_key ASC, currency ASC;
         `;
-      } else if (params.group_by === 'product') {
-        groupSql = `
+      } else if (parametros.group_by === 'product') {
+        sql_agrupamento = `
           SELECT
             product_id AS group_key,
             product_name AS group_name,
@@ -104,8 +105,8 @@ export class ReportService {
           GROUP BY product_id, product_name, currency
           ORDER BY gross_cents DESC, currency ASC;
         `;
-      } else if (params.group_by === 'platform') {
-        groupSql = `
+      } else if (parametros.group_by === 'platform') {
+        sql_agrupamento = `
           SELECT
             platform AS group_key,
             currency,
@@ -124,30 +125,35 @@ export class ReportService {
         `;
       }
 
-      if (groupSql) {
-        const groupResult = await query(groupSql, [fromDate, toDate]);
-        groups = groupResult.rows.map((row) => ({
-          group_key: row.group_key,
-          group_name: row.group_name || undefined,
-          currency: row.currency,
-          gross_cents: Number(row.gross_cents),
-          refunded_cents: Number(row.refunded_cents),
-          net_cents: Number(row.net_cents),
-          sales_count: Number(row.sales_count),
-          refunds_count: Number(row.refunds_count),
+      if (sql_agrupamento) {
+        const resultado_agrupamento = await query(sql_agrupamento, [data_inicio, data_fim]);
+        groups = resultado_agrupamento.rows.map((linha) => ({
+          group_key: linha.group_key,
+          group_name: linha.group_name || undefined,
+          currency: linha.currency,
+          gross_cents: Number(linha.gross_cents),
+          refunded_cents: Number(linha.refunded_cents),
+          net_cents: Number(linha.net_cents),
+          sales_count: Number(linha.sales_count),
+          refunds_count: Number(linha.refunds_count),
         }));
       }
     }
 
     return {
       period: {
-        from: fromDate.toISOString(),
-        to: toDate.toISOString(),
+        from: data_inicio.toISOString(),
+        to: data_fim.toISOString(),
         timezone: 'UTC',
       },
-      group_by: params.group_by,
+      group_by: parametros.group_by,
       currencies,
       groups,
     };
+  }
+
+  // Alias para manter compatibilidade com chamadas existentes
+  async getSalesReport(params: ReportQueryParams): Promise<SalesReportResponse> {
+    return this.obter_relatorio_vendas(params);
   }
 }

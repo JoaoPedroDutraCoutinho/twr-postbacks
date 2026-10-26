@@ -7,12 +7,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export async function runMigrations() {
-  const client = await pool.connect();
+  const cliente_banco = await pool.connect();
   try {
-    console.log('🔄 Executando migrações do banco de dados...');
+    console.log('[MIGRACAO] Executando migracoes do banco de dados...');
     
-    // Tabela para controlar migrações já executadas
-    await client.query(`
+    // Tabela para controlar migracoes ja executadas
+    await cliente_banco.query(`
       CREATE TABLE IF NOT EXISTS _migrations (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL UNIQUE,
@@ -20,39 +20,41 @@ export async function runMigrations() {
       );
     `);
 
-    const migrationsDir = path.join(__dirname, 'migrations');
-    const files = await fs.readdir(migrationsDir);
-    const sqlFiles = files.filter((f) => f.endsWith('.sql')).sort();
+    const diretorio_migracoes = path.join(__dirname, 'migrations');
+    const arquivos = await fs.readdir(diretorio_migracoes);
+    const arquivos_sql = arquivos.filter((arquivo) => arquivo.endsWith('.sql')).sort();
 
-    for (const file of sqlFiles) {
-      const alreadyExecuted = await client.query(
+    for (const arquivo of arquivos_sql) {
+      const ja_executado = await cliente_banco.query(
         'SELECT 1 FROM _migrations WHERE name = $1',
-        [file]
+        [arquivo]
       );
 
-      if (alreadyExecuted.rowCount === 0) {
-        console.log(`⏳ Aplicando migração: ${file}`);
-        const sql = await fs.readFile(path.join(migrationsDir, file), 'utf-8');
+      if (ja_executado.rowCount === 0) {
+        console.log(`[MIGRACAO] Aplicando migracao: ${arquivo}`);
+        const conteudo_sql = await fs.readFile(path.join(diretorio_migracoes, arquivo), 'utf-8');
         
-        await client.query('BEGIN');
+        await cliente_banco.query('BEGIN');
         try {
-          await client.query(sql);
-          await client.query('INSERT INTO _migrations (name) VALUES ($1)', [file]);
-          await client.query('COMMIT');
-          console.log(`✅ Migração ${file} concluída.`);
-        } catch (err) {
-          await client.query('ROLLBACK');
-          console.error(`❌ Falha na migração ${file}:`, err);
-          throw err;
+          await cliente_banco.query(conteudo_sql);
+          await cliente_banco.query('INSERT INTO _migrations (name) VALUES ($1)', [arquivo]);
+          await cliente_banco.query('COMMIT');
+          console.log(`[MIGRACAO] Migracao ${arquivo} concluida com sucesso.`);
+        } catch (erro) {
+          await cliente_banco.query('ROLLBACK');
+          console.error(`[ERRO] Falha na migracao ${arquivo}:`, erro);
+          throw erro;
         }
       }
     }
 
-    console.log('🎉 Todas as migrações estão atualizadas.');
+    console.log('[MIGRACAO] Todas as migracoes estao atualizadas.');
   } finally {
-    client.release();
+    cliente_banco.release();
   }
 }
+
+export const executar_migracoes = runMigrations;
 
 // Se executado diretamente pelo terminal (npm run db:migrate)
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

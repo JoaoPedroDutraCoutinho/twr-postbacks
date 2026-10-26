@@ -4,15 +4,15 @@ Aplicação de alta performance em **TypeScript** e **Fastify** para recepção 
 
 ---
 
-## 🌐 URL Pública da Aplicação
+## URL Pública da Aplicação
 
-- **Base URL:** 
-- **Health Check:** `GET https://twr-postbacks.onrender.com/health`
-- **Relatório de Vendas:** `GET https://twr-postbacks.onrender.com/reports/sales`
+- **Base URL:** *(preencher com a URL do deploy)*
+- **Health Check:** `GET /health`
+- **Relatório de Vendas:** `GET /reports/sales`
 
 ---
 
-## 🛠️ Stack Tecnológica
+## Stack Tecnológica
 
 | Camada | Tecnologia | Motivação |
 | :--- | :--- | :--- |
@@ -26,33 +26,33 @@ Aplicação de alta performance em **TypeScript** e **Fastify** para recepção 
 
 ---
 
-## 📐 Arquitetura do Sistema
+## Arquitetura do Sistema
 
 ```mermaid
 flowchart TD
-    Platform[Plataforma de Checkout\nKiwify / Hotmart / Stripe] -->|POST /webhooks/sales\nHeader: X-Signature| Receptor[Fastify App]
+    Platform["Plataforma de Checkout (Kiwify / Hotmart / Stripe)"] -->|POST /webhooks/sales - Header: X-Signature| Receptor[Fastify App]
     
     subgraph Receptor [Pipeline do Receptor]
-        RawCapture[1. Captura Buffer Bruto\nreq.rawBody] --> HMAC[2. Validação Criptográfica\nHMAC-SHA256 timingSafeEqual]
-        HMAC -->|401 Inválido| RejectAuth[401 Unauthorized]
-        HMAC -->|Válido| ZodVal[3. Validação de Schema\nZod]
-        ZodVal -->|422 Inválido| RejectSchema[422 Unprocessable Entity]
-        ZodVal -->|Válido| DBInsert[4. Inserção com Idempotência\nON CONFLICT DO NOTHING]
+        RawCapture["1. Captura Buffer Bruto (req.rawBody)"] --> HMAC["2. Validacao Criptografica (HMAC-SHA256 timingSafeEqual)"]
+        HMAC -->|401 Invalido| RejectAuth[401 Unauthorized]
+        HMAC -->|Valido| ZodVal["3. Validacao de Schema (Zod)"]
+        ZodVal -->|422 Invalido| RejectSchema[422 Unprocessable Entity]
+        ZodVal -->|Valido| DBInsert["4. Insercao com Idempotencia (ON CONFLICT DO NOTHING)"]
     end
 
-    DBInsert -->|Já existia| DupResp[200 OK - Evento Duplicado Ignorado]
+    DBInsert -->|Ja existia| DupResp[200 OK - Evento Duplicado Ignorado]
     DBInsert -->|Novo| NewResp[201 Created - Evento Registrado]
     
-    DBInsert --> Postgres[(PostgreSQL\nsale_events append-only)]
+    DBInsert --> Postgres[("PostgreSQL (sale_events append-only)")]
     
-    Client[Cliente / Dashboard] -->|GET /reports/sales| ReportAPI[Motor de Relatórios]
-    ReportAPI -->|SQL Agregações SUM/COUNT\nFiltros de Data & group_by| Postgres
-    ReportAPI --> Response[JSON Consolidado\nMoedas Isoladas & Grupos]
+    Client["Cliente / Dashboard"] -->|GET /reports/sales| ReportAPI[Motor de Relatorios]
+    ReportAPI -->|Agregacoes SQL SUM e COUNT| Postgres
+    ReportAPI --> Response[JSON Consolidado com Moedas Isoladas]
 ```
 
 ---
 
-## 🚀 Como Executar Localmente
+## Como Executar Localmente
 
 ### Pré-requisitos
 - Node.js 22 ou superior instalado
@@ -98,7 +98,7 @@ npm start
 
 ---
 
-## 🧪 Bateria de Testes Automatizados
+## Bateria de Testes Automatizados
 
 O projeto conta com uma suíte de testes de integração em **Vitest** cobrindo os cenários mais complexos de sistemas orientados a eventos:
 
@@ -116,9 +116,9 @@ npm test
 
 ---
 
-## ⚡ Simulador de Plataforma de Checkout (`npm run simulate`)
+## Simulador de Plataforma de Checkout (`npm run simulate`)
 
-Para demonstrar a robustez em tempo real em menos de 30 segundos, criamos um simulador executável que dispara um fluxo realista de vendas:
+Para demonstrar a robustez em tempo real em menos de 10 segundos, criamos um simulador executável que dispara um fluxo realista de vendas:
 
 ```bash
 npm run simulate
@@ -134,7 +134,7 @@ O script:
 
 ---
 
-## 📮 Como Chamar a Aplicação (Exemplos Práticos)
+## Como Chamar a Aplicação (Exemplos Práticos)
 
 ### 1. POST do Webhook (`POST /webhooks/sales`)
 
@@ -260,7 +260,7 @@ curl -X GET "http://localhost:3000/reports/sales?from=2026-10-01T00:00:00Z&to=20
 
 ---
 
-## 📦 Coleção Postman
+## Coleção Postman
 
 No diretório `postman/` do repositório você encontra:
 - `twr_postbacks_collection.json`: Coleção contendo testes automatizados para todas as rotas e **Pre-request Script dinâmico que calcula o HMAC-SHA256 automaticamente** usando `CryptoJS`.
@@ -269,7 +269,7 @@ No diretório `postman/` do repositório você encontra:
 
 ---
 
-## 🧠 Premissas e Decisões de Engenharia
+## Premissas e Decisões de Engenharia
 
 ### 1. Idempotência no Nível do Banco (`ON CONFLICT DO NOTHING`)
 - **Problema real:** Plataformas de pagamento implementam retentativas agressivas quando encontram oscilações de rede. Se duas requisições idênticas atingirem o receptor simultaneamente, uma verificação em memória ou um simples `SELECT` prévio sofreriam de *race condition*.
@@ -284,21 +284,21 @@ No diretório `postman/` do repositório você encontra:
 - **Decisão:** Adotamos um modelo *append-only*. Não sobrepomos registros nem dependemos de locks pesados de linha. O relatório calcula o faturamento líquido (`net_cents = gross_cents - refunded_cents`) a partir dos eventos gravados, gerando sempre o mesmo resultado determinístico, independentemente da ordem de chegada.
 
 ### 4. Valores Monetários em Centavos Inteiros (`amount_cents`)
-- **Decisão:** Nenhum valor monetário é manipulado como ponto flutuante (`float`/`double`), eliminando os clássicos erros de arredondamento da norma IEEE 754 (ex: `0.1 + 0.2 = 0.30000000000000004`).
+- **Decisão:** Nenhum valor monetário é manipulado como ponto flutuante (`float`/`double`), eliminando os clássicos erros de arredondamento da norma IEEE 754.
 
 ### 5. Isolamento Estrito de Moedas
-- **Decisão:** Não existe "conversão mágica" de câmbio implícita no backend. R$ 100,00 e $ 100,00 USD são totalizados em registros independentes na chave `currencies`.
+- **Decisão:** Não existe conversão cambial implícita no backend. R$ 100,00 e $ 100,00 USD são totalizados em registros independentes na chave `currencies`.
 
 ### 6. Fuso Horário UTC Padronizado
 - **Decisão:** Todos os agrupamentos diários (`group_by=day`) utilizam `DATE_TRUNC('day', event_created_at AT TIME ZONE 'UTC')`, evitando discrepâncias causadas pelo horário local do servidor.
 
 ---
 
-## 🚫 O que Decidimos NÃO Fazer (e Por Quê)
+## O que Decidimos NÃO Fazer (e Por Quê)
 
 1. **Fila Distribuída (Kafka / RabbitMQ / SQS):**
    - *Por que não:* Para o escopo do desafio (tempo estimado de 3 a 4 horas), adicionar um broker de mensagens adicionaria complexidade operacional desnecessária (gerenciamento de acks, dead-letters externas, múltiplos containers). O PostgreSQL lida com dezenas de milhares de inserções por segundo com garantias transacionais ACID estritas.
-   - *Como escalar:* Em um cenário real com picos acima de 50.000 requisições/segundo, o receptor Fastify apenas enfileiraria o payload bruto em um tópico Kafka/SQS, e workers desacoplados gravariam no banco.
+   - *Como escalar:* Em um cenário real com picos acima de 50.000 requisições/segundo, o receptor Fastify apenas enfileiraria o payload bruto em um buffer assíncrono (ex: SQS ou Redis Streams) e workers gravariam no banco.
 
 2. **Banco Analítico Dedicado (ClickHouse):**
    - *Por que não:* Índices btree compostos no PostgreSQL em `(event_type, currency, event_created_at)` resolvem agregações analíticas de milhões de registros em menos de 10 milissegundos. Introduzir ClickHouse exigiria pipelines de CDC (Change Data Capture) como Debezium.
@@ -308,7 +308,7 @@ No diretório `postman/` do repositório você encontra:
 
 ---
 
-## 📈 Limitações e Próximos Passos (Evolução Técnica)
+## Limitações e Próximos Passos (Evolução Técnica)
 
 - **Dead-Letter Queue interna:** Mecanismo para armazenar eventos que falharam na validação para posterior auditoria/reprocessamento.
 - **Rotação de Segredos:** Suporte a múltiplos segredos simultâneos para permitir rotação de chaves sem downtime.
@@ -316,6 +316,6 @@ No diretório `postman/` do repositório você encontra:
 
 ---
 
-## 🤖 Transparência sobre Ferramentas
+## Transparência sobre Ferramentas
 
 Conforme as melhores práticas da engenharia moderna e os conselhos do time da TWR, este projeto foi planejado arquiteturalmente e implementado com o auxílio de inteligência artificial (Google Antigravity), tendo **cada linha de código, teste automatizado, tipagem e decisão de engenharia minuciosamente revisada, validada e compreendida**.

@@ -15,27 +15,28 @@ export interface SaleEventRow {
   created_at: Date;
 }
 
-class MemoryDatabase {
-  private events: SaleEventRow[] = [];
-  private currentId = 1;
+class BancoEmMemoria {
+  private eventos: SaleEventRow[] = [];
+  private id_atual = 1;
 
   reset() {
-    this.events = [];
-    this.currentId = 1;
+    this.eventos = [];
+    this.id_atual = 1;
   }
 
-  insertEvent(row: Omit<SaleEventRow, 'id' | 'created_at'>): { rowCount: number; rows: { id: string }[] } {
-    const exists = this.events.some(
-      (e) => e.platform === row.platform && e.event_id === row.event_id
+  inserir_evento(linha_registro: Omit<SaleEventRow, 'id' | 'created_at'>): { rowCount: number; rows: { id: string }[] } {
+    // Constraint de idempotencia: UNIQUE (platform, event_id)
+    const ja_existe = this.eventos.some(
+      (evento) => evento.platform === linha_registro.platform && evento.event_id === linha_registro.event_id
     );
 
-    if (exists) {
+    if (ja_existe) {
       return { rowCount: 0, rows: [] };
     }
 
-    const id = String(this.currentId++);
-    this.events.push({
-      ...row,
+    const id = String(this.id_atual++);
+    this.eventos.push({
+      ...linha_registro,
       id,
       created_at: new Date(),
     });
@@ -43,81 +44,93 @@ class MemoryDatabase {
     return { rowCount: 1, rows: [{ id }] };
   }
 
-  getTotals(fromDate: Date, toDate: Date): any[] {
-    const filtered = this.events.filter(
-      (e) => e.event_created_at >= fromDate && e.event_created_at <= toDate
+  insertEvent(linha_registro: Omit<SaleEventRow, 'id' | 'created_at'>) {
+    return this.inserir_evento(linha_registro);
+  }
+
+  obter_totais(data_inicio: Date, data_fim: Date): any[] {
+    const eventos_filtrados = this.eventos.filter(
+      (evento) => evento.event_created_at >= data_inicio && evento.event_created_at <= data_fim
     );
 
-    const currencies = Array.from(new Set(filtered.map((e) => e.currency))).sort();
+    const lista_moedas = Array.from(new Set(eventos_filtrados.map((evento) => evento.currency))).sort();
 
-    return currencies.map((curr) => {
-      const items = filtered.filter((e) => e.currency === curr);
-      const approved = items.filter((e) => e.event_type === 'approved');
-      const refunded = items.filter((e) => e.event_type === 'refunded');
+    return lista_moedas.map((moeda) => {
+      const itens_moeda = eventos_filtrados.filter((evento) => evento.currency === moeda);
+      const vendas_aprovadas = itens_moeda.filter((evento) => evento.event_type === 'approved');
+      const reembolsos = itens_moeda.filter((evento) => evento.event_type === 'refunded');
 
-      const gross_cents = approved.reduce((acc, curr) => acc + curr.amount_cents, 0);
-      const refunded_cents = refunded.reduce((acc, curr) => acc + curr.amount_cents, 0);
+      const gross_cents = vendas_aprovadas.reduce((acumulado, item) => acumulado + item.amount_cents, 0);
+      const refunded_cents = reembolsos.reduce((acumulado, item) => acumulado + item.amount_cents, 0);
 
       return {
-        currency: curr,
+        currency: moeda,
         gross_cents,
         refunded_cents,
         net_cents: gross_cents - refunded_cents,
-        sales_count: approved.length,
-        refunds_count: refunded.length,
+        sales_count: vendas_aprovadas.length,
+        refunds_count: reembolsos.length,
       };
     });
   }
 
-  getGrouped(fromDate: Date, toDate: Date, groupBy: 'day' | 'product' | 'platform'): any[] {
-    const filtered = this.events.filter(
-      (e) => e.event_created_at >= fromDate && e.event_created_at <= toDate
+  getTotals(data_inicio: Date, data_fim: Date) {
+    return this.obter_totais(data_inicio, data_fim);
+  }
+
+  obter_agrupados(data_inicio: Date, data_fim: Date, dimensao_agrupamento: 'day' | 'product' | 'platform'): any[] {
+    const eventos_filtrados = this.eventos.filter(
+      (evento) => evento.event_created_at >= data_inicio && evento.event_created_at <= data_fim
     );
 
-    const groupsMap = new Map<string, { group_key: string; group_name?: string; currency: string; items: SaleEventRow[] }>();
+    const mapa_grupos = new Map<string, { group_key: string; group_name?: string; currency: string; items: SaleEventRow[] }>();
 
-    for (const item of filtered) {
-      let groupKey = '';
-      let groupName: string | undefined;
+    for (const item of eventos_filtrados) {
+      let chave_grupo = '';
+      let nome_grupo: string | undefined;
 
-      if (groupBy === 'day') {
-        groupKey = item.event_created_at.toISOString().slice(0, 10);
-      } else if (groupBy === 'product') {
-        groupKey = item.product_id;
-        groupName = item.product_name;
-      } else if (groupBy === 'platform') {
-        groupKey = item.platform;
+      if (dimensao_agrupamento === 'day') {
+        chave_grupo = item.event_created_at.toISOString().slice(0, 10);
+      } else if (dimensao_agrupamento === 'product') {
+        chave_grupo = item.product_id;
+        nome_grupo = item.product_name;
+      } else if (dimensao_agrupamento === 'platform') {
+        chave_grupo = item.platform;
       }
 
-      const mapKey = `${groupKey}_${item.currency}`;
-      if (!groupsMap.has(mapKey)) {
-        groupsMap.set(mapKey, { group_key: groupKey, group_name: groupName, currency: item.currency, items: [] });
+      const chave_mapa = `${chave_grupo}_${item.currency}`;
+      if (!mapa_grupos.has(chave_mapa)) {
+        mapa_grupos.set(chave_mapa, { group_key: chave_grupo, group_name: nome_grupo, currency: item.currency, items: [] });
       }
-      groupsMap.get(mapKey)!.items.push(item);
+      mapa_grupos.get(chave_mapa)!.items.push(item);
     }
 
-    const results: any[] = [];
-    for (const group of groupsMap.values()) {
-      const approved = group.items.filter((e) => e.event_type === 'approved');
-      const refunded = group.items.filter((e) => e.event_type === 'refunded');
+    const resultados: any[] = [];
+    for (const grupo of mapa_grupos.values()) {
+      const vendas_aprovadas = grupo.items.filter((evento) => evento.event_type === 'approved');
+      const reembolsos = grupo.items.filter((evento) => evento.event_type === 'refunded');
 
-      const gross_cents = approved.reduce((acc, curr) => acc + curr.amount_cents, 0);
-      const refunded_cents = refunded.reduce((acc, curr) => acc + curr.amount_cents, 0);
+      const gross_cents = vendas_aprovadas.reduce((acumulado, item) => acumulado + item.amount_cents, 0);
+      const refunded_cents = reembolsos.reduce((acumulado, item) => acumulado + item.amount_cents, 0);
 
-      results.push({
-        group_key: group.group_key,
-        group_name: group.group_name,
-        currency: group.currency,
+      resultados.push({
+        group_key: grupo.group_key,
+        group_name: grupo.group_name,
+        currency: grupo.currency,
         gross_cents,
         refunded_cents,
         net_cents: gross_cents - refunded_cents,
-        sales_count: approved.length,
-        refunds_count: refunded.length,
+        sales_count: vendas_aprovadas.length,
+        refunds_count: reembolsos.length,
       });
     }
 
-    return results;
+    return resultados;
+  }
+
+  getGrouped(data_inicio: Date, data_fim: Date, dimensao_agrupamento: 'day' | 'product' | 'platform') {
+    return this.obter_agrupados(data_inicio, data_fim, dimensao_agrupamento);
   }
 }
 
-export const memoryDb = new MemoryDatabase();
+export const memoryDb = new BancoEmMemoria();

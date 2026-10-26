@@ -2,41 +2,47 @@ import { isMemoryDb, query } from '../db/index.js';
 import { memoryDb } from '../db/memory.js';
 import { WebhookPayload } from '../schemas/webhook.schema.js';
 
-export interface ProcessWebhookResult {
+export interface ResultadoProcessamentoWebhook {
   isNew: boolean;
   eventId: string;
   id?: string;
 }
 
-export class WebhookService {
-  async processEvent(payload: WebhookPayload, rawPayload: any): Promise<ProcessWebhookResult> {
-    const normalizedEventType = payload.event_type.replace('sale.', '');
+export type ProcessWebhookResult = ResultadoProcessamentoWebhook;
 
-    // Se estiver em modo de teste ou banco em memória
+export class WebhookService {
+  /**
+   * Metodo criar_vendas: responsavel por receber a notificacao de postback,
+   * normalizar os dados e persistir com garantia de idempotencia.
+   */
+  async criar_vendas(dados_payload: WebhookPayload, payload_bruto: any): Promise<ResultadoProcessamentoWebhook> {
+    const tipo_evento_normalizado = dados_payload.event_type.replace('sale.', '');
+
+    // Se estiver em modo de teste ou banco em memoria
     if (isMemoryDb()) {
-      const memResult = memoryDb.insertEvent({
-        platform: payload.platform,
-        event_id: payload.event_id,
-        event_type: normalizedEventType,
-        order_id: payload.order_id,
-        product_id: payload.product.id,
-        product_name: payload.product.name,
-        currency: payload.currency,
-        amount_cents: payload.amount_cents,
-        customer_email: payload.customer.email,
-        customer_name: payload.customer.name,
-        payload: rawPayload,
-        event_created_at: new Date(payload.event_created_at),
+      const resultado_memoria = memoryDb.inserir_evento({
+        platform: dados_payload.platform,
+        event_id: dados_payload.event_id,
+        event_type: tipo_evento_normalizado,
+        order_id: dados_payload.order_id,
+        product_id: dados_payload.product.id,
+        product_name: dados_payload.product.name,
+        currency: dados_payload.currency,
+        amount_cents: dados_payload.amount_cents,
+        customer_email: dados_payload.customer.email,
+        customer_name: dados_payload.customer.name,
+        payload: payload_bruto,
+        event_created_at: new Date(dados_payload.event_created_at),
       });
 
       return {
-        isNew: memResult.rowCount > 0,
-        eventId: payload.event_id,
-        id: memResult.rows[0]?.id,
+        isNew: resultado_memoria.rowCount > 0,
+        eventId: dados_payload.event_id,
+        id: resultado_memoria.rows[0]?.id,
       };
     }
 
-    const insertSql = `
+    const sql_insercao = `
       INSERT INTO sale_events (
         platform,
         event_id,
@@ -57,35 +63,44 @@ export class WebhookService {
       RETURNING id;
     `;
 
-    const values = [
-      payload.platform,
-      payload.event_id,
-      normalizedEventType,
-      payload.order_id,
-      payload.product.id,
-      payload.product.name,
-      payload.currency,
-      payload.amount_cents,
-      payload.customer.email,
-      payload.customer.name || null,
-      JSON.stringify(rawPayload),
-      payload.event_created_at,
+    const valores = [
+      dados_payload.platform,
+      dados_payload.event_id,
+      tipo_evento_normalizado,
+      dados_payload.order_id,
+      dados_payload.product.id,
+      dados_payload.product.name,
+      dados_payload.currency,
+      dados_payload.amount_cents,
+      dados_payload.customer.email,
+      dados_payload.customer.name || null,
+      JSON.stringify(payload_bruto),
+      dados_payload.event_created_at,
     ];
 
-    const result = await query(insertSql, values);
+    const resultado = await query(sql_insercao, valores);
 
-    // Se rowCount for 0, o registro já existia (idempotência disparada pelo ON CONFLICT)
-    if (result.rowCount === 0) {
+    // Se rowCount for 0, o registro ja existia (idempotencia disparada pelo ON CONFLICT)
+    if (resultado.rowCount === 0) {
       return {
         isNew: false,
-        eventId: payload.event_id,
+        eventId: dados_payload.event_id,
       };
     }
 
     return {
       isNew: true,
-      eventId: payload.event_id,
-      id: result.rows[0].id,
+      eventId: dados_payload.event_id,
+      id: resultado.rows[0].id,
     };
+  }
+
+  // Alias para manter compatibilidade com padrao em ingles
+  async criar_venda(dados_payload: WebhookPayload, payload_bruto: any): Promise<ResultadoProcessamentoWebhook> {
+    return this.criar_vendas(dados_payload, payload_bruto);
+  }
+
+  async processEvent(payload: WebhookPayload, rawPayload: any): Promise<ResultadoProcessamentoWebhook> {
+    return this.criar_vendas(payload, rawPayload);
   }
 }

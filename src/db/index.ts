@@ -3,15 +3,15 @@ import { env } from '../config/env.js';
 
 const { Pool } = pg;
 
-let useMemory =
+let usar_banco_memoria =
   process.env.NODE_ENV === 'test' || process.env.USE_MEMORY_DB === 'true';
 
 export function isMemoryDb(): boolean {
-  return useMemory;
+  return usar_banco_memoria;
 }
 
-export function setMemoryDb(enabled: boolean) {
-  useMemory = enabled;
+export function setMemoryDb(habilitado: boolean) {
+  usar_banco_memoria = habilitado;
 }
 
 export const pool = new Pool({
@@ -21,27 +21,31 @@ export const pool = new Pool({
   connectionTimeoutMillis: 5000,
 });
 
-pool.on('error', (err) => {
-  if (!useMemory) {
-    console.error('Erro inesperado no pool do PostgreSQL:', err);
+pool.on('error', (erro) => {
+  if (!usar_banco_memoria) {
+    console.error('[ERRO] Falha inesperada no pool do PostgreSQL:', erro);
   }
 });
 
 export async function query<T extends pg.QueryResultRow = any>(
-  text: string,
-  params?: any[]
+  sql_texto: string,
+  parametros?: any[]
 ): Promise<pg.QueryResult<T>> {
-  return pool.query<T>(text, params);
+  return pool.query<T>(sql_texto, parametros);
 }
 
+export const executar_query = query;
+
 export async function checkConnection(): Promise<boolean> {
-  if (useMemory) {
+  if (usar_banco_memoria) {
     return true;
   }
   try {
-    const res = await pool.query('SELECT 1 as healthy');
-    return res.rows[0]?.healthy === 1;
-  } catch (err) {
+    const resposta = await pool.query('SELECT 1 as healthy');
+    return resposta.rows[0]?.healthy === 1;
+  } catch (erro) {
     return false;
   }
 }
+
+export const verificar_conexao = checkConnection;
