@@ -7,7 +7,21 @@ import { verifyHmacSignature } from '../utils/hmac.js';
 export async function webhookRoutes(app: FastifyInstance) {
   const servico_webhook = new WebhookService();
 
-  app.post('/webhooks/sales', async (request, reply) => {
+  app.post('/webhooks/sales', {
+    config: {
+      // Rate limit especifico: plataformas de checkout enviam rajadas,
+      // mas limitamos para proteger contra abuso externo
+      rateLimit: {
+        max: 200,
+        timeWindow: '1 minute',
+        errorResponseBuilder: (_request, contexto) => ({
+          statusCode: 429,
+          error: 'Too Many Requests',
+          message: `Limite de requisicoes excedido. Tente novamente em ${contexto.after}.`,
+        }),
+      },
+    },
+  }, async (request, reply) => {
     const assinatura = request.headers['x-signature'] as string | undefined;
 
     // 1. Validacao de assinatura criptografica HMAC-SHA256 sobre o corpo bruto (raw body)

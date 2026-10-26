@@ -5,7 +5,21 @@ import { ReportService } from '../services/report.service.js';
 export async function reportRoutes(app: FastifyInstance) {
   const servico_relatorio = new ReportService();
 
-  app.get('/reports/sales', async (request, reply) => {
+  app.get('/reports/sales', {
+    config: {
+      // Rate limit especifico: relatorios sao consumo humano/dashboard,
+      // limite mais restrito para proteger queries pesadas no banco
+      rateLimit: {
+        max: 60,
+        timeWindow: '1 minute',
+        errorResponseBuilder: (_request, contexto) => ({
+          statusCode: 429,
+          error: 'Too Many Requests',
+          message: `Limite de consultas excedido. Tente novamente em ${contexto.after}.`,
+        }),
+      },
+    },
+  }, async (request, reply) => {
     const resultado_validacao = reportQuerySchema.safeParse(request.query);
 
     if (!resultado_validacao.success) {

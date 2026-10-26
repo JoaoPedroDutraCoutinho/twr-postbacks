@@ -1,4 +1,5 @@
 import Fastify, { FastifyError, FastifyInstance } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import crypto from 'node:crypto';
 import { healthRoutes } from './routes/health.routes.js';
 import { reportRoutes } from './routes/report.routes.js';
@@ -15,18 +16,28 @@ export function buildApp(): FastifyInstance {
     logger: {
       level: process.env.NODE_ENV === 'test' ? 'silent' : 'info',
     },
-    // Observabilidade: Correlation ID / Request ID único por requisição
+    // Observabilidade: Correlation ID / Request ID unico por requisicao
     requestIdHeader: 'x-request-id',
     genReqId: (req) =>
       (req.headers['x-request-id'] as string) ||
       `req_${crypto.randomBytes(6).toString('hex')}`,
   });
 
+  // Retorna o x-request-id no cabecalho de resposta para rastreamento
   app.addHook('onSend', async (request, reply) => {
     reply.header('x-request-id', request.id);
   });
 
-  // Captura o corpo bruto (Buffer) para validação de assinatura HMAC
+  // Rate Limiting: protecao contra excesso de requisicoes e ataques DDoS
+  // Webhook POST: limite alto (plataformas reais enviam rajadas)
+  // Relatorio GET: limite moderado (consumo humano/dashboard)
+  if (process.env.NODE_ENV !== 'test') {
+    app.register(rateLimit, {
+      global: false, // Nao aplica globalmente; controla rota por rota
+    });
+  }
+
+  // Captura o corpo bruto (Buffer) para validacao de assinatura HMAC
   app.addContentTypeParser(
     'application/json',
     { parseAs: 'buffer' },
@@ -47,10 +58,12 @@ export function buildApp(): FastifyInstance {
     }
   );
 
+  // Registro de rotas (health nao tem rate limit - infra de monitoramento)
   app.register(healthRoutes);
   app.register(webhookRoutes);
   app.register(reportRoutes);
 
+  // Tratador global de erros
   app.setErrorHandler((error: FastifyError, request, reply) => {
     const statusCode = error.statusCode || 500;
 
