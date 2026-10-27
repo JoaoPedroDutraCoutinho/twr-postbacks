@@ -14,6 +14,7 @@ A aplicação está publicada no **Render** (Web Service com Docker + PostgreSQL
 | **Health Check** | [`GET /health`](https://twr-postbacks-v8wu.onrender.com/health) |
 | **Receptor de Webhooks** | `POST https://twr-postbacks-v8wu.onrender.com/webhooks/sales` |
 | **Relatório de Vendas** | [`GET /reports/sales`](https://twr-postbacks-v8wu.onrender.com/reports/sales) |
+| **Métricas (Prometheus)** | [`GET /metrics`](https://twr-postbacks-v8wu.onrender.com/metrics) |
 
 > **Atenção:** o serviço roda no plano gratuito do Render, que hiberna após ~15 minutos sem tráfego. A **primeira requisição** depois disso pode levar de 30 a 60 segundos (cold start); as seguintes respondem normalmente.
 
@@ -31,6 +32,7 @@ Resposta esperada:
 - **Banco:** PostgreSQL gerenciado do Render, injetado via variável `DATABASE_URL`.
 - **Variáveis de ambiente:** `DATABASE_URL`, `WEBHOOK_SECRET` e `NODE_ENV=production` (o `PORT` é definido pelo próprio Render). Para facilitar a avaliação, o `WEBHOOK_SECRET` de produção é o mesmo do ambiente local (`twr_webhook_secret_key_2026`), então os exemplos de assinatura deste README e a coleção Postman funcionam tanto em `localhost` quanto na URL pública.
 - **Migrações:** executadas automaticamente na inicialização do servidor (`runMigrations()` em `src/server.ts`), de forma idempotente (`CREATE TABLE IF NOT EXISTS`).
+- **Tracing:** o container sobe com `node --import ./dist/observability/tracing.js dist/server.js`. Sem a variável `OTEL_EXPORTER_OTLP_ENDPOINT` o tracing fica desligado e nenhum pacote do OpenTelemetry é carregado (veja [Observabilidade](#observabilidade)).
 
 ---
 
@@ -40,10 +42,11 @@ Resposta esperada:
 | :--- | :--- | :--- |
 | **Linguagem** | **TypeScript 5 (Strict Mode)** | Tipagem estática, segurança em tempo de compilação e manutenibilidade. |
 | **Runtime** | **Node.js 22+** | Suporte a ES Modules nativos e alta velocidade de I/O assíncrono. |
-| **Framework HTTP** | **Fastify** | Alta performance (até 3x mais rápido que Express), overhead mínimo e suporte nativo a manipulação de buffer bruto (*raw body*). |
+| **Framework HTTP** | **Fastify** | Alta performance, overhead mínimo e suporte nativo a manipulação de buffer bruto (*raw body*). |
 | **Validação** | **Zod** | Validação em runtime de payloads e query params com inferência de tipos estáticos. |
 | **Banco de Dados** | **PostgreSQL** (`pg` pool) | Transacional (ACID), constraints de unicidade para concorrência e agregações analíticas de alta velocidade. |
 | **Testes** | **Vitest** | Suíte de testes automatizados ultrarrápida com cobertura dos cenários críticos de checkout. |
+| **Observabilidade** | **Prometheus (`prom-client`) + OpenTelemetry** | Métricas em `/metrics`, traces distribuídos (HTTP + PostgreSQL) e `trace_id` nos logs. |
 | **Containers** | **Docker & Docker Compose** | Reprodutibilidade de ambiente local e prontidão para deploy. |
 
 ---
@@ -97,11 +100,14 @@ Variáveis disponíveis no `.env`:
 - `NODE_ENV`: `development` | `test` | `production`
 - `DATABASE_URL`: String de conexão PostgreSQL
 - `WEBHOOK_SECRET`: Chave secreta compartilhada para cálculo do HMAC (`twr_webhook_secret_key_2026`)
+- `OTEL_EXPORTER_OTLP_ENDPOINT` *(opcional)*: liga o tracing OpenTelemetry e envia os traces para esse coletor (ex: `http://localhost:4318`)
+- `OTEL_SERVICE_NAME` *(opcional)*: nome do serviço nos traces (padrão: `twr-postbacks`)
 
-### 3. Subir o Banco de Dados (PostgreSQL via Docker)
+### 3. Subir o Banco de Dados e o Jaeger (via Docker)
 ```bash
 docker compose up -d
 ```
+Sobe o PostgreSQL (porta `5432`) e o Jaeger para visualizar traces (UI em `http://localhost:16686`).
 
 ### 4. Executar Migrações do Banco
 ```bash
@@ -122,19 +128,55 @@ npm start
 
 ## Bateria de Testes Automatizados
 
-O projeto conta com uma suíte de testes de integração em **Vitest** cobrindo os cenários mais complexos de sistemas orientados a eventos:
+O projeto conta com uma suíte de testes em **Vitest** que exercita a aplicação inteira (rotas, assinatura, validação e relatório) via `app.inject`, cobrindo os cenários mais complexos de sistemas orientados a eventos:
 
 ```bash
 npm test
 ```
 
+> **Sobre o banco nos testes:** para a suíte rodar em menos de 1 segundo e sem Docker, os testes usam uma implementação em memória do repositório (`src/db/memory.ts`) que replica a regra de unicidade `(platform, event_id)`. A garantia de concorrência no **PostgreSQL real** vem da constraint `UNIQUE` + `ON CONFLICT DO NOTHING` e pode ser verificada com o simulador (`npm run simulate`), que dispara uma rajada concorrente contra o banco de verdade.
+
 ### Os 6 Casos Core Testados:
 1. **Evento duplicado**: Retorna HTTP 200 e conta apenas 1 venda no relatório financeiro.
-2. **20 envios concorrentes em paralelo**: Disparo simultâneo (`Promise.all`) de 20 requisições idênticas; exatamente 1 resulta em 201 e 19 em 200, garantindo isolamento de concorrência.
+2. **20 envios concorrentes em paralelo**: Disparo simultâneo (`Promise.all`) de 20 requisições idênticas; exatamente 1 resulta em 201 e 19 em 200, validando o contrato de idempotência sob envios paralelos.
 3. **Reembolso fora de ordem**: Um evento de `sale.refunded` recebido antes da aprovação produz o mesmo resultado determinístico de faturamento líquido (`net_cents = 0`).
 4. **Payload inválido**: Payloads com campos faltantes, valores negativos ou JSON quebrado retornam HTTP 422 com detalhamento Zod.
 5. **Assinatura adulterada**: Header `X-Signature` incorreto ou ausente retorna HTTP 401 sem processar a requisição.
 6. **Isolamento de moedas**: Transações em `BRL` e `USD` são totalizadas em buckets próprios sem se misturar.
+
+Testes adicionais cobrem o `/health`, o agrupamento `group_by=product` e as **métricas** (`/metrics` contando webhooks `created`, `duplicate` e `unauthorized`).
+
+---
+
+## Observabilidade
+
+### Métricas (`GET /metrics`)
+Endpoint no formato **Prometheus**, pronto para ser coletado por Prometheus, Grafana Agent ou Datadog:
+
+| Métrica | Tipo | O que mostra |
+| :--- | :--- | :--- |
+| `twr_webhooks_received_total{result}` | Counter | Webhooks recebidos por resultado: `created`, `duplicate`, `unauthorized`, `invalid`, `rate_limited`, `error`. |
+| `twr_http_request_duration_seconds{method,route,status_code}` | Histogram | Latência por rota (permite calcular p95/p99). |
+| `twr_db_pool_connections{state}` | Gauge | Conexões do pool do PostgreSQL (`total`, `idle`, `waiting`). |
+| `process_*`, `nodejs_*` | Diversos | CPU, memória, event loop lag e GC do Node.js. |
+
+Exemplos de uso: alertar quando `rate(twr_webhooks_received_total{result="unauthorized"}[5m])` subir (alguém forjando assinaturas) ou quando `duplicate` disparar (plataforma em loop de retentativas).
+
+### Traces distribuídos (OpenTelemetry)
+Com a variável `OTEL_EXPORTER_OTLP_ENDPOINT` definida, cada requisição gera um trace com:
+- span HTTP nomeado pela rota (ex: `POST /webhooks/sales`), com os atributos `webhook.platform`, `webhook.event_id`, `webhook.event_type` e `webhook.duplicate`, o que permite responder na hora "o evento X chegou? foi duplicado?";
+- spans filhos das queries no PostgreSQL (`pg.query:INSERT ...`, `pg-pool.connect`);
+- o `trace_id` injetado em cada linha de log e devolvido no header `x-trace-id`, ligando logs e traces.
+
+Para ver localmente no Jaeger (no lugar da variável na linha de comando, dá para descomentar `OTEL_EXPORTER_OTLP_ENDPOINT` no `.env`):
+```bash
+docker compose up -d
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 npm run dev
+npm run simulate
+```
+Depois abra `http://localhost:16686` e selecione o serviço `twr-postbacks`.
+
+A configuração fica em `src/observability/tracing.ts`, carregado via `node --import` antes da aplicação (requisito para instrumentar módulos ESM). Sem a variável, o tracing fica desligado e nenhum pacote do OpenTelemetry é carregado. `/health` e `/metrics` são ignorados para não poluir os traces.
 
 ---
 
@@ -332,7 +374,8 @@ Para usar: importe a coleção e os dois environments no Postman, selecione o en
    - *Como escalar:* Em um cenário real com picos acima de 50.000 requisições/segundo, o receptor Fastify apenas enfileiraria o payload bruto em um buffer assíncrono (ex: SQS ou Redis Streams) e workers gravariam no banco.
 
 2. **Banco Analítico Dedicado (ClickHouse):**
-   - *Por que não:* Índices btree compostos no PostgreSQL em `(event_type, currency, event_created_at)` resolvem agregações analíticas de milhões de registros em menos de 10 milissegundos. Introduzir ClickHouse exigiria pipelines de CDC (Change Data Capture) como Debezium.
+   - *Por que não:* Índices btree compostos no PostgreSQL em `(event_type, currency, event_created_at)` atendem com folga as agregações do relatório no volume esperado para o desafio. Introduzir ClickHouse exigiria pipelines de CDC (Change Data Capture) como Debezium.
+   - *Quando faria sentido:* com centenas de milhões de eventos e dashboards consultando em tempo real, o `sale_events` (que já é *append-only*) seria replicado para o ClickHouse e o relatório passaria a consultá-lo.
 
 3. **GraphQL:**
    - *Por que não:* O enunciado solicita explicitamente a recepção por `POST` e relatório por `GET`. REST com HTTP Caching e query params oferece menor latência e padrão universal para webhooks.
@@ -341,9 +384,10 @@ Para usar: importe a coleção e os dois environments no Postman, selecione o en
 
 ## Limitações e Próximos Passos (Evolução Técnica)
 
+- **Testes contra PostgreSQL real no CI:** rodar a mesma suíte também contra um PostgreSQL de verdade (GitHub Actions com container de serviço), validando a concorrência diretamente no banco.
+- **Processamento assíncrono:** gravar o payload bruto e responder imediatamente, deixando um worker processar os eventos a partir de uma fila no próprio PostgreSQL (`SELECT ... FOR UPDATE SKIP LOCKED`), com retentativas.
 - **Dead-Letter Queue interna:** Mecanismo para armazenar eventos que falharam na validação para posterior auditoria/reprocessamento.
 - **Rotação de Segredos:** Suporte a múltiplos segredos simultâneos para permitir rotação de chaves sem downtime.
-- **Exportação OpenTelemetry:** Instrumentação com OpenTelemetry SDK para tracing distribuído e métricas Prometheus (`/metrics`).
 
 ---
 

@@ -3,15 +3,11 @@ import { env } from '../config/env.js';
 
 const { Pool } = pg;
 
-let usar_banco_memoria =
+const usar_banco_memoria =
   process.env.NODE_ENV === 'test' || process.env.USE_MEMORY_DB === 'true';
 
 export function isMemoryDb(): boolean {
   return usar_banco_memoria;
-}
-
-export function setMemoryDb(habilitado: boolean) {
-  usar_banco_memoria = habilitado;
 }
 
 export const pool = new Pool({
@@ -34,8 +30,6 @@ export async function query<T extends pg.QueryResultRow = any>(
   return pool.query<T>(sql_texto, parametros);
 }
 
-export const executar_query = query;
-
 export async function checkConnection(): Promise<boolean> {
   if (usar_banco_memoria) {
     return true;
@@ -47,5 +41,3 @@ export async function checkConnection(): Promise<boolean> {
     return false;
   }
 }
-
-export const verificar_conexao = checkConnection;

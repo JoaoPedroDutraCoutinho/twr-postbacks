@@ -8,10 +8,8 @@ export interface ResultadoProcessamentoWebhook {
   id?: string;
 }
 
-export type ProcessWebhookResult = ResultadoProcessamentoWebhook;
-
 export class WebhookService {
-  async criar_vendas(dados_payload: WebhookPayload, payload_bruto: any): Promise<ResultadoProcessamentoWebhook> {
+  async registrar_evento(dados_payload: WebhookPayload, payload_bruto: any): Promise<ResultadoProcessamentoWebhook> {
     const tipo_evento_normalizado = dados_payload.event_type.replace('sale.', '');
 
     // Se estiver em modo de teste ou banco em memoria
@@ -88,13 +86,5 @@ export class WebhookService {
       eventId: dados_payload.event_id,
       id: resultado.rows[0].id,
     };
-  }
-
-  async criar_venda(dados_payload: WebhookPayload, payload_bruto: any): Promise<ResultadoProcessamentoWebhook> {
-    return this.criar_vendas(dados_payload, payload_bruto);
-  }
-
-  async processEvent(payload: WebhookPayload, rawPayload: any): Promise<ResultadoProcessamentoWebhook> {
-    return this.criar_vendas(payload, rawPayload);
   }
 }

@@ -49,6 +49,9 @@ Retorna métricas analíticas e consolidadas das vendas.
 Verificação de saúde do serviço e conectividade com o banco de dados PostgreSQL.
 - **Respostas:** `200 OK` (saudável) ou `503 Service Unavailable` (banco fora do ar).
 
+### `GET /metrics`
+Métricas no formato Prometheus: webhooks recebidos por resultado (`created`, `duplicate`, `unauthorized`, `invalid`, `rate_limited`, `error`), latência por rota e estado do pool do PostgreSQL.
+
 ---
 
 ## 4. Regras de Negócio e Engenharia
@@ -83,7 +86,7 @@ Verificação de saúde do serviço e conectividade com o banco de dados Postgre
   - *Motivo:* Para a escala de um receptor de checkout único e o tempo de desenvolvimento de 3-4 horas, introduzir brokers de mensageria adicionaria complexidade operacional desnecessária (falhas de conexão, ack duplo, partições, dead-letters externas). O Postgres suporta milhares de transações por segundo com ACID e sem pontos únicos de falha adicionais.
 
 - **Banco Analítico Dedicado (ClickHouse):**
-  - *Decisão:* Agregações SQL analíticas diretamente no PostgreSQL utilizando índices btree em `(event_type, created_at, currency)`.
+  - *Decisão:* Agregações SQL analíticas diretamente no PostgreSQL utilizando índices btree em `(event_type, currency, event_created_at)`.
   - *Motivo:* Para volumes de dezenas de milhões de eventos, índices bem estruturados no Postgres respondem agregações em poucos milissegundos. Adotar ClickHouse nesta etapa traria sincronização de CDC (Change Data Capture) desnecessária para o escopo.
 
 - **GraphQL:**

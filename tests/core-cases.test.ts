@@ -292,4 +292,46 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
     expect(groups.some((g: any) => g.group_key === 'prod_alpha' && g.gross_cents === 8000)).toBe(true);
     expect(groups.some((g: any) => g.group_key === 'prod_beta' && g.gross_cents === 12000)).toBe(true);
   });
+
+  // Teste Adicional: Observabilidade
+  it('GET /metrics conta webhooks por resultado no formato Prometheus', async () => {
+    async function ler_contador_webhooks(resultado: string): Promise<number> {
+      const resposta = await aplicacao.inject({ method: 'GET', url: '/metrics' });
+      const linha = resposta.body
+        .split('\n')
+        .find((l) => l.startsWith(`twr_webhooks_received_total{result="${resultado}"}`));
+      return Number(linha?.split(' ').pop() ?? NaN);
+    }
+
+    const antes = {
+      created: await ler_contador_webhooks('created'),
+      duplicate: await ler_contador_webhooks('duplicate'),
+      unauthorized: await ler_contador_webhooks('unauthorized'),
+    };
+
+    const dados_venda = {
+      platform: 'kiwify',
+      event_id: 'evt_metrics_1',
+      event_type: 'sale.approved',
+      order_id: 'ord_metrics_1',
+      product: { id: 'prod_metrics', name: 'Curso Metricas' },
+      currency: 'BRL',
+      amount_cents: 3000,
+      customer: { email: 'metricas@teste.com' },
+    };
+
+    await enviar_webhook(dados_venda);
+    await enviar_webhook(dados_venda);
+    await enviar_webhook(dados_venda, 'segredo_errado_123456');
+
+    expect(await ler_contador_webhooks('created')).toBe(antes.created + 1);
+    expect(await ler_contador_webhooks('duplicate')).toBe(antes.duplicate + 1);
+    expect(await ler_contador_webhooks('unauthorized')).toBe(antes.unauthorized + 1);
+
+    const resposta_metricas = await aplicacao.inject({ method: 'GET', url: '/metrics' });
+    expect(resposta_metricas.statusCode).toBe(200);
+    expect(resposta_metricas.headers['content-type']).toContain('text/plain');
+    expect(resposta_metricas.body).toContain('twr_http_request_duration_seconds_bucket');
+    expect(resposta_metricas.body).toContain('route="/webhooks/sales"');
+  });
 });

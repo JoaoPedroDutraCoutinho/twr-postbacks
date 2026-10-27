@@ -19,5 +19,14 @@ services:
       timeout: 5s
       retries: 5
 
+  # Visualizacao de traces (OpenTelemetry). UI em http://localhost:16686
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    container_name: twr_jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+
 volumes:
   postgres_data:

@@ -15,5 +15,4 @@ if (!resultado_validacao.success) {
   process.exit(1);
 }
 
-export const config_ambiente = resultado_validacao.data;
-export const env = config_ambiente;
+export const env = resultado_validacao.data;

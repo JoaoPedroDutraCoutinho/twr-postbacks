@@ -28,11 +28,7 @@ export function verifyHmacSignature(
   }
 }
 
-export const verificar_assinatura_hmac = verifyHmacSignature;
-
 export function generateHmacSignature(payload: string | Buffer, segredo: string): string {
   const buffer = Buffer.isBuffer(payload) ? payload : Buffer.from(payload, 'utf-8');
   return crypto.createHmac('sha256', segredo).update(buffer).digest('hex');
 }
-
-export const gerar_assinatura_hmac = generateHmacSignature;

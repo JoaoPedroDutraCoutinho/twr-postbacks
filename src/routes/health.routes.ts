@@ -7,6 +7,7 @@ export async function healthRoutes(app: FastifyInstance) {
     status: 'online',
     endpoints: {
       health: 'GET /health',
+      metrics: 'GET /metrics',
       webhook: 'POST /webhooks/sales',
       report: 'GET /reports/sales',
     },

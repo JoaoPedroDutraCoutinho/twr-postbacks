@@ -43,10 +43,6 @@ class BancoEmMemoria {
     return { rowCount: 1, rows: [{ id }] };
   }
 
-  insertEvent(linha_registro: Omit<SaleEventRow, 'id' | 'created_at'>) {
-    return this.inserir_evento(linha_registro);
-  }
-
   obter_totais(data_inicio: Date, data_fim: Date): any[] {
     const eventos_filtrados = this.eventos.filter(
       (evento) => evento.event_created_at >= data_inicio && evento.event_created_at <= data_fim
@@ -71,10 +67,6 @@ class BancoEmMemoria {
         refunds_count: reembolsos.length,
       };
     });
-  }
-
-  getTotals(data_inicio: Date, data_fim: Date) {
-    return this.obter_totais(data_inicio, data_fim);
   }
 
   obter_agrupados(data_inicio: Date, data_fim: Date, dimensao_agrupamento: 'day' | 'product' | 'platform'): any[] {
@@ -125,10 +117,6 @@ class BancoEmMemoria {
     }
 
     return resultados;
-  }
-
-  getGrouped(data_inicio: Date, data_fim: Date, dimensao_agrupamento: 'day' | 'product' | 'platform') {
-    return this.obter_agrupados(data_inicio, data_fim, dimensao_agrupamento);
   }
 }
 

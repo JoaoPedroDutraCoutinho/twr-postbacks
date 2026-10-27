@@ -1,3 +1,4 @@
+import { trace } from '@opentelemetry/api';
 import { FastifyInstance } from 'fastify';
 import { env } from '../config/env.js';
 import { webhookPayloadSchema } from '../schemas/webhook.schema.js';
@@ -47,10 +48,18 @@ export async function webhookRoutes(app: FastifyInstance) {
       });
     }
 
-    const resultado_criacao = await servico_webhook.criar_vendas(
-      resultado_validacao.data,
-      request.body
-    );
+    const dados_evento = resultado_validacao.data;
+
+    // Permite buscar um evento especifico no Jaeger/Grafana (ex: "esse event_id chegou?")
+    const span_ativo = trace.getActiveSpan();
+    span_ativo?.setAttributes({
+      'webhook.platform': dados_evento.platform,
+      'webhook.event_id': dados_evento.event_id,
+      'webhook.event_type': dados_evento.event_type,
+    });
+
+    const resultado_criacao = await servico_webhook.registrar_evento(dados_evento, request.body);
+    span_ativo?.setAttribute('webhook.duplicate', !resultado_criacao.isNew);
 
     if (resultado_criacao.isNew) {
       return reply.status(201).send({

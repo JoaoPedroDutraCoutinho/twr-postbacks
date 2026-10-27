@@ -1,13 +1,19 @@
 import Fastify, { FastifyError, FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
+import { trace } from '@opentelemetry/api';
 import crypto from 'node:crypto';
+import { criar_metricas, Metricas } from './observability/metrics.js';
 import { healthRoutes } from './routes/health.routes.js';
+import { metricsRoutes } from './routes/metrics.routes.js';
 import { reportRoutes } from './routes/report.routes.js';
 import { webhookRoutes } from './routes/webhook.routes.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
     rawBody?: Buffer;
+  }
+  interface FastifyInstance {
+    metricas: Metricas;
   }
 }
 
@@ -25,9 +31,30 @@ export function buildApp(): FastifyInstance {
       `req_${crypto.randomBytes(6).toString('hex')}`,
   });
 
-  // Retorna o x-request-id no cabecalho de resposta para rastreamento
+  const metricas = criar_metricas();
+  app.decorate('metricas', metricas);
+
+  // Com o tracing ligado, o span HTTP passa a ter o nome da rota (ex: "POST /webhooks/sales")
+  app.addHook('onRequest', async (request) => {
+    const span_ativo = trace.getActiveSpan();
+    const rota = request.routeOptions.url;
+    if (span_ativo && rota) {
+      span_ativo.updateName(`${request.method} ${rota}`);
+      span_ativo.setAttribute('http.route', rota);
+    }
+  });
+
+  // Retorna o x-request-id (e o x-trace-id, se o tracing estiver ligado) para rastreamento
   app.addHook('onSend', async (request, reply) => {
     reply.header('x-request-id', request.id);
+    const span_ativo = trace.getActiveSpan();
+    if (span_ativo) {
+      reply.header('x-trace-id', span_ativo.spanContext().traceId);
+    }
+  });
+
+  app.addHook('onResponse', async (request, reply) => {
+    metricas.observar_resposta(request.method, request.routeOptions.url, reply.statusCode, reply.elapsedTime);
   });
   if (process.env.NODE_ENV !== 'test') {
     app.register(rateLimit, {
@@ -56,6 +83,7 @@ export function buildApp(): FastifyInstance {
   );
 
   app.register(healthRoutes);
+  app.register(metricsRoutes);
   app.register(webhookRoutes);
   app.register(reportRoutes);
 

@@ -53,8 +53,6 @@ export async function runMigrations() {
   }
 }
 
-export const executar_migracoes = runMigrations;
-
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   runMigrations()
     .then(() => process.exit(0))
