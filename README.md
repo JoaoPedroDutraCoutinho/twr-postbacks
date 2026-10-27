@@ -29,7 +29,7 @@ Resposta esperada:
 ### Deploy (Render)
 - **Build:** a partir do `Dockerfile` do repositório (multi-stage, `node:22-alpine`).
 - **Banco:** PostgreSQL gerenciado do Render, injetado via variável `DATABASE_URL`.
-- **Variáveis de ambiente:** `DATABASE_URL`, `WEBHOOK_SECRET` e `NODE_ENV=production` (o `PORT` é definido pelo próprio Render). O `WEBHOOK_SECRET` de produção é configurado no painel do Render; para assinar webhooks contra a URL pública, use esse mesmo segredo (no Postman, variável `webhookSecret` do environment **TWR Production**).
+- **Variáveis de ambiente:** `DATABASE_URL`, `WEBHOOK_SECRET` e `NODE_ENV=production` (o `PORT` é definido pelo próprio Render). Para facilitar a avaliação, o `WEBHOOK_SECRET` de produção é o mesmo do ambiente local (`twr_webhook_secret_key_2026`), então os exemplos de assinatura deste README e a coleção Postman funcionam tanto em `localhost` quanto na URL pública.
 - **Migrações:** executadas automaticamente na inicialização do servidor (`runMigrations()` em `src/server.ts`), de forma idempotente (`CREATE TABLE IF NOT EXISTS`).
 
 ---
