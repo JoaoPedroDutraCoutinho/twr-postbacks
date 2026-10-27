@@ -16,6 +16,8 @@ export function buildApp(): FastifyInstance {
     logger: {
       level: process.env.NODE_ENV === 'test' ? 'silent' : 'info',
     },
+    // Render (e outros PaaS) ficam atras de proxy: usa o IP real do cliente (X-Forwarded-For) no rate limit
+    trustProxy: true,
     // Observabilidade: Correlation ID / Request ID unico por requisicao
     requestIdHeader: 'x-request-id',
     genReqId: (req) =>

@@ -9,25 +9,50 @@ body:
   content: |-
     {
       "platform": "kiwify",
+      "event_id": "evt_invalid_payload_test",
       "event_type": "sale.approved",
-      "amount_cents": -100
+      "order_id": "ord_invalid_1",
+      "product": {
+        "id": "prod_saas",
+        "name": "Plano Pro TWR"
+      },
+      "currency": "BRL",
+      "amount_cents": -100,
+      "customer": {
+        "email": "comprador@twrplay.com",
+        "name": "João da Silva"
+      }
     }
 scripts:
   - type: beforeRequest
     code: |-
-      const body = pm.request.body.raw;
-      const sig = CryptoJS.HmacSHA256(body, pm.environment.get("webhookSecret")).toString(CryptoJS.enc.Hex);
-      pm.request.headers.upsert({ key: "X-Signature", value: sig });
+      const crypto = require('crypto-js');
+      const secret = pm.environment.get('webhookSecret');
+      const body = pm.request.body.toString();
+      const signature = crypto.HmacSHA256(body, secret).toString(crypto.enc.Hex);
+      pm.request.headers.upsert({key: 'X-Signature', value: signature});
     language: text/javascript
   - type: afterResponse
     code: |-
       pm.test("Status code é 422 Unprocessable Entity", function () {
           pm.response.to.have.status(422);
       });
-      pm.test("Retorna detalhamento das validações Zod", function () {
+      pm.test("Erro no formato padrão da API", function () {
           var json = pm.response.json();
+          pm.expect(json.statusCode).to.eql(422);
           pm.expect(json.error).to.eql("Unprocessable Entity");
           pm.expect(json.issues).to.be.an("object");
+      });
+      pm.test("Aponta amount_cents como inválido", function () {
+          var json = pm.response.json();
+          pm.expect(json.issues).to.have.property("amount_cents");
+          pm.expect(json.issues.amount_cents._errors[0]).to.include("negativo");
+      });
+      pm.test("Não acusa os campos que estão corretos", function () {
+          var json = pm.response.json();
+          pm.expect(json.issues).to.not.have.property("event_id");
+          pm.expect(json.issues).to.not.have.property("order_id");
+          pm.expect(json.issues).to.not.have.property("currency");
       });
     language: text/javascript
 order: 4000

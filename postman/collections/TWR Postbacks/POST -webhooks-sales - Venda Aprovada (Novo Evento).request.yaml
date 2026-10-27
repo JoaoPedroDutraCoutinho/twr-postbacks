@@ -26,10 +26,12 @@ body:
 scripts:
   - type: beforeRequest
     code: |-
-      pm.variables.set("eventId", "evt_" + Date.now());
-      const body = pm.variables.replaceIn(pm.request.body.raw);
-      const sig = CryptoJS.HmacSHA256(body, pm.environment.get("webhookSecret")).toString(CryptoJS.enc.Hex);
-      pm.request.headers.upsert({ key: "X-Signature", value: sig });
+      pm.variables.set('eventId', 'evt_' + Date.now());
+      const crypto = require('crypto-js');
+      const secret = pm.environment.get('webhookSecret');
+      const body = pm.variables.replaceIn(pm.request.body.toString());
+      const signature = crypto.HmacSHA256(body, secret).toString(crypto.enc.Hex);
+      pm.request.headers.upsert({key: 'X-Signature', value: signature});
     language: text/javascript
   - type: afterResponse
     code: |-

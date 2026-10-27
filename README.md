@@ -6,9 +6,31 @@ Aplicação de alta performance em **TypeScript** e **Fastify** para recepção 
 
 ## URL Pública da Aplicação
 
-- **Base URL:** *(preencher com a URL do deploy)*
-- **Health Check:** `GET /health`
-- **Relatório de Vendas:** `GET /reports/sales`
+A aplicação está publicada no **Render** (Web Service com Docker + PostgreSQL gerenciado):
+
+| Recurso | URL |
+| :--- | :--- |
+| **Base URL** | https://twr-postbacks-v8wu.onrender.com |
+| **Health Check** | [`GET /health`](https://twr-postbacks-v8wu.onrender.com/health) |
+| **Receptor de Webhooks** | `POST https://twr-postbacks-v8wu.onrender.com/webhooks/sales` |
+| **Relatório de Vendas** | [`GET /reports/sales`](https://twr-postbacks-v8wu.onrender.com/reports/sales) |
+
+> **Atenção:** o serviço roda no plano gratuito do Render, que hiberna após ~15 minutos sem tráfego. A **primeira requisição** depois disso pode levar de 30 a 60 segundos (cold start); as seguintes respondem normalmente.
+
+Teste rápido:
+```bash
+curl https://twr-postbacks-v8wu.onrender.com/health
+```
+Resposta esperada:
+```json
+{ "status": "ok", "uptime": 13.66, "database": "connected", "timestamp": "2026-10-27T15:10:04.861Z" }
+```
+
+### Deploy (Render)
+- **Build:** a partir do `Dockerfile` do repositório (multi-stage, `node:22-alpine`).
+- **Banco:** PostgreSQL gerenciado do Render, injetado via variável `DATABASE_URL`.
+- **Variáveis de ambiente:** `DATABASE_URL`, `WEBHOOK_SECRET` e `NODE_ENV=production` (o `PORT` é definido pelo próprio Render). O `WEBHOOK_SECRET` de produção é configurado no painel do Render; para assinar webhooks contra a URL pública, use esse mesmo segredo (no Postman, variável `webhookSecret` do environment **TWR Production**).
+- **Migrações:** executadas automaticamente na inicialização do servidor (`runMigrations()` em `src/server.ts`), de forma idempotente (`CREATE TABLE IF NOT EXISTS`).
 
 ---
 
@@ -132,9 +154,16 @@ O script:
 - Tenta forçar payloads malformados e assinaturas forjadas;
 - Consulta o endpoint de relatório e imprime a **reconciliação financeira exata**.
 
+Para rodar o simulador contra a aplicação **em produção**, basta apontar a variável `API_URL`:
+```bash
+API_URL=https://twr-postbacks-v8wu.onrender.com npm run simulate
+```
+
 ---
 
 ## Como Chamar a Aplicação (Exemplos Práticos)
+
+> Os exemplos abaixo usam `http://localhost:3000`. Para chamar a aplicação em produção, troque pela Base URL `https://twr-postbacks-v8wu.onrender.com`.
 
 ### 1. POST do Webhook (`POST /webhooks/sales`)
 
@@ -265,7 +294,9 @@ curl -X GET "http://localhost:3000/reports/sales?from=2026-10-01T00:00:00Z&to=20
 No diretório `postman/` do repositório você encontra:
 - `twr_postbacks_collection.json`: Coleção contendo testes automatizados para todas as rotas e **Pre-request Script dinâmico que calcula o HMAC-SHA256 automaticamente** usando `CryptoJS`.
 - `twr_local.postman_environment.json`: Variáveis para ambiente local (`http://localhost:3000`).
-- `twr_production.postman_environment.json`: Variáveis para o ambiente em produção na nuvem.
+- `twr_production.postman_environment.json`: Variáveis para o ambiente em produção (`https://twr-postbacks-v8wu.onrender.com`).
+
+Para usar: importe a coleção e os dois environments no Postman, selecione o environment desejado (**TWR Localhost** ou **TWR Production**) e execute a coleção pelo *Collection Runner*.
 
 ---
 

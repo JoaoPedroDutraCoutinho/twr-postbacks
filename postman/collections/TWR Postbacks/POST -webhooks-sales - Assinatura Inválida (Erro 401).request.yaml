@@ -1,3 +1,4 @@
+
 $kind: http-request
 name: POST /webhooks/sales - Assinatura Inválida (Erro 401)
 url: "{{baseUrl}}/webhooks/sales"
@@ -13,10 +14,16 @@ body:
       "event_id": "evt_fake",
       "event_type": "sale.approved",
       "order_id": "ord_fake",
-      "product": { "id": "p1", "name": "P1" },
+      "product": {
+        "id": "p1",
+        "name": "P1"
+      },
       "currency": "BRL",
       "amount_cents": 1000,
-      "customer": { "email": "fake@teste.com" }
+      "customer": {
+        "email": "comprador@twrplay.com",
+        "name": "João da Silva"
+      }
     }
 scripts:
   - type: afterResponse
@@ -24,9 +31,14 @@ scripts:
       pm.test("Status code é 401 Unauthorized", function () {
           pm.response.to.have.status(401);
       });
+
       pm.test("Retorna mensagem de erro de autenticação", function () {
           var json = pm.response.json();
           pm.expect(json.error).to.eql("Unauthorized");
+      });
+
+      pm.test("Mensagem menciona o header X-Signature", function () {
+          pm.expect(pm.response.json().message).to.include("X-Signature");
       });
     language: text/javascript
 order: 5000
