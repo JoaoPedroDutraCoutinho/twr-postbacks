@@ -11,10 +11,6 @@ export interface ResultadoProcessamentoWebhook {
 export type ProcessWebhookResult = ResultadoProcessamentoWebhook;
 
 export class WebhookService {
-  /**
-   * Metodo criar_vendas: responsavel por receber a notificacao de postback,
-   * normalizar os dados e persistir com garantia de idempotencia.
-   */
   async criar_vendas(dados_payload: WebhookPayload, payload_bruto: any): Promise<ResultadoProcessamentoWebhook> {
     const tipo_evento_normalizado = dados_payload.event_type.replace('sale.', '');
 
@@ -80,7 +76,6 @@ export class WebhookService {
 
     const resultado = await query(sql_insercao, valores);
 
-    // Se rowCount for 0, o registro ja existia (idempotencia disparada pelo ON CONFLICT)
     if (resultado.rowCount === 0) {
       return {
         isNew: false,
@@ -95,7 +90,6 @@ export class WebhookService {
     };
   }
 
-  // Alias para manter compatibilidade com padrao em ingles
   async criar_venda(dados_payload: WebhookPayload, payload_bruto: any): Promise<ResultadoProcessamentoWebhook> {
     return this.criar_vendas(dados_payload, payload_bruto);
   }

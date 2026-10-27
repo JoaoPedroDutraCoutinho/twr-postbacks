@@ -9,8 +9,6 @@ export async function webhookRoutes(app: FastifyInstance) {
 
   app.post('/webhooks/sales', {
     config: {
-      // Rate limit especifico: plataformas de checkout enviam rajadas,
-      // mas limitamos para proteger contra abuso externo
       rateLimit: {
         max: 200,
         timeWindow: '1 minute',
@@ -24,7 +22,6 @@ export async function webhookRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const assinatura = request.headers['x-signature'] as string | undefined;
 
-    // 1. Validacao de assinatura criptografica HMAC-SHA256 sobre o corpo bruto (raw body)
     const assinatura_valida = verifyHmacSignature(
       request.rawBody,
       assinatura,
@@ -39,7 +36,6 @@ export async function webhookRoutes(app: FastifyInstance) {
       });
     }
 
-    // 2. Validacao do schema do payload com Zod
     const resultado_validacao = webhookPayloadSchema.safeParse(request.body);
 
     if (!resultado_validacao.success) {
@@ -51,7 +47,6 @@ export async function webhookRoutes(app: FastifyInstance) {
       });
     }
 
-    // 3. Processamento e registro da venda com garantia de idempotencia
     const resultado_criacao = await servico_webhook.criar_vendas(
       resultado_validacao.data,
       request.body
@@ -67,7 +62,6 @@ export async function webhookRoutes(app: FastifyInstance) {
       });
     }
 
-    // Retorna 200 OK para sinalizar a plataforma que o evento ja foi acolhido
     return reply.status(200).send({
       statusCode: 200,
       status: 'duplicate',

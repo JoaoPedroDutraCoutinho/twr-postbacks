@@ -14,11 +14,9 @@ CREATE TABLE IF NOT EXISTS sale_events (
     event_created_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     
-    -- Constraint central de idempotencia: impede duplicacao no nivel de banco
     CONSTRAINT uk_platform_event UNIQUE (platform, event_id)
 );
-
--- Indices otimizados para agregacao de relatorios analiticos
+ 
 CREATE INDEX IF NOT EXISTS idx_sale_events_order_id ON sale_events(order_id);
 CREATE INDEX IF NOT EXISTS idx_sale_events_reporting ON sale_events(event_type, currency, event_created_at);
 CREATE INDEX IF NOT EXISTS idx_sale_events_product_id ON sale_events(product_id);

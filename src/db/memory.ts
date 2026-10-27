@@ -25,7 +25,6 @@ class BancoEmMemoria {
   }
 
   inserir_evento(linha_registro: Omit<SaleEventRow, 'id' | 'created_at'>): { rowCount: number; rows: { id: string }[] } {
-    // Constraint de idempotencia: UNIQUE (platform, event_id)
     const ja_existe = this.eventos.some(
       (evento) => evento.platform === linha_registro.platform && evento.event_id === linha_registro.event_id
     );

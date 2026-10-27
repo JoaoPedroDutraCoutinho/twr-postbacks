@@ -1,4 +1,3 @@
-# Estágio 1: Build da aplicação TypeScript
 FROM node:22-alpine AS builder
 
 WORKDIR /app

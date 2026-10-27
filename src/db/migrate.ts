@@ -10,8 +10,7 @@ export async function runMigrations() {
   const cliente_banco = await pool.connect();
   try {
     console.log('[MIGRACAO] Executando migracoes do banco de dados...');
-    
-    // Tabela para controlar migracoes ja executadas
+
     await cliente_banco.query(`
       CREATE TABLE IF NOT EXISTS _migrations (
         id SERIAL PRIMARY KEY,
@@ -56,7 +55,6 @@ export async function runMigrations() {
 
 export const executar_migracoes = runMigrations;
 
-// Se executado diretamente pelo terminal (npm run db:migrate)
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   runMigrations()
     .then(() => process.exit(0))

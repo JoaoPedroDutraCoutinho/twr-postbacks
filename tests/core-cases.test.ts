@@ -15,7 +15,6 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
     memoryDb.reset();
   });
 
-  // Helper para assinar e disparar webhook
   async function enviar_webhook(dados_payload: any, segredo = env.WEBHOOK_SECRET, assinatura_customizada?: string) {
     const corpo_bruto = JSON.stringify(dados_payload);
     const assinatura = assinatura_customizada ?? generateHmacSignature(corpo_bruto, segredo);
@@ -31,7 +30,6 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
     });
   }
 
-  // Helper para buscar relatorio
   async function buscar_relatorio(parametros_consulta = '') {
     return aplicacao.inject({
       method: 'GET',
@@ -39,7 +37,6 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
     });
   }
 
-  // CASO 1: Evento duplicado conta uma venda
   it('1. Evento duplicado retorna 200 e conta apenas uma venda no relatorio', async () => {
     const dados_venda = {
       platform: 'kiwify',
@@ -78,7 +75,6 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
     });
   });
 
-  // CASO 2: 20 envios identicos em paralelo contam uma venda
   it('2. 20 envios concorrentes identicos registram exatamente uma venda', async () => {
     const dados_venda = {
       platform: 'hotmart',
@@ -91,14 +87,12 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
       customer: { email: 'concorrente@teste.com' },
     };
 
-    // Dispara 20 requisicoes simultaneas
     const lista_promessas = Array.from({ length: 20 }, () => enviar_webhook(dados_venda));
     const lista_respostas = await Promise.all(lista_promessas);
 
     const contagem_status_201 = lista_respostas.filter((r) => r.statusCode === 201).length;
     const contagem_status_200 = lista_respostas.filter((r) => r.statusCode === 200).length;
 
-    // Exatamente uma insercao deve ter sido realizada com sucesso (201) e 19 ignoradas (200)
     expect(contagem_status_201).toBe(1);
     expect(contagem_status_200).toBe(19);
 
@@ -108,9 +102,7 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
     expect(resumo_brl.gross_cents).toBe(5000);
   });
 
-  // CASO 3: Reembolso antes da aprovacao gera o mesmo relatorio final
   it('3. Reembolso recebido antes ou depois da aprovacao gera o mesmo resultado financeiro', async () => {
-    // Cenario A: Reembolso chega antes da aprovacao (out-of-order)
     const reembolso_pedido_a = {
       platform: 'kiwify',
       event_id: 'evt_refund_order_a',
@@ -152,13 +144,11 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
     expect(brl.refunds_count).toBe(1);
   });
 
-  // CASO 4: Payload invalido retorna 422
   it('4. Payload malformado ou campos obrigatorios faltantes retornam 422', async () => {
-    // Faltando platform e amount_cents negativo
     const payload_invalido = {
       event_id: 'evt_inv_1',
       event_type: 'sale.approved',
-      amount_cents: -500, // Invalido: nao pode ser negativo
+      amount_cents: -500,
     };
 
     const resposta = await enviar_webhook(payload_invalido);
@@ -166,7 +156,6 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
     expect(resposta.json().error).toBe('Unprocessable Entity');
     expect(resposta.json().issues).toBeDefined();
 
-    // Payload com JSON quebrado
     const json_bruto_quebrado = '{ "platform": "kiwify", invalid }';
     const assinatura_quebrada = generateHmacSignature(json_bruto_quebrado, env.WEBHOOK_SECRET);
     const resposta_quebrada = await aplicacao.inject({
@@ -181,7 +170,6 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
     expect(resposta_quebrada.statusCode).toBe(422);
   });
 
-  // CASO 5: Assinatura errada retorna 401
   it('5. Assinatura HMAC incorreta ou ausente retorna 401 Unauthorized', async () => {
     const dados_venda = {
       platform: 'kiwify',
@@ -199,7 +187,6 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
     expect(resposta_assinatura_errada.statusCode).toBe(401);
     expect(resposta_assinatura_errada.json().error).toBe('Unauthorized');
 
-    // Sem header X-Signature
     const resposta_sem_assinatura = await aplicacao.inject({
       method: 'POST',
       url: '/webhooks/sales',
@@ -211,9 +198,7 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
     expect(resposta_sem_assinatura.statusCode).toBe(401);
   });
 
-  // CASO 6: Duas moedas nao se misturam
   it('6. Transacoes em moedas distintas sao totalizadas separadamente sem se misturar', async () => {
-    // Venda em BRL (R$ 100,00)
     await enviar_webhook({
       platform: 'kiwify',
       event_id: 'evt_brl_1',
@@ -225,7 +210,6 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
       customer: { email: 'br@teste.com' },
     });
 
-    // Venda em USD ($ 50.00)
     await enviar_webhook({
       platform: 'stripe',
       event_id: 'evt_usd_1',

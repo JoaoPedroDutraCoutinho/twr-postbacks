@@ -1,9 +1,5 @@
 import crypto from 'node:crypto';
 
-/**
- * Valida a assinatura HMAC-SHA256 recebida no header contra o corpo bruto (Buffer) da requisicao.
- * Utiliza crypto.timingSafeEqual para proteger contra ataques de canal lateral (timing attacks).
- */
 export function verifyHmacSignature(
   corpo_bruto: Buffer | undefined,
   cabecalho_assinatura: string | undefined,
@@ -34,9 +30,6 @@ export function verifyHmacSignature(
 
 export const verificar_assinatura_hmac = verifyHmacSignature;
 
-/**
- * Utilitario para gerar a assinatura HMAC-SHA256 de um payload (usado no simulador e testes).
- */
 export function generateHmacSignature(payload: string | Buffer, segredo: string): string {
   const buffer = Buffer.isBuffer(payload) ? payload : Buffer.from(payload, 'utf-8');
   return crypto.createHmac('sha256', segredo).update(buffer).digest('hex');

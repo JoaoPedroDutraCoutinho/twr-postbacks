@@ -152,7 +152,6 @@ export class ReportService {
     };
   }
 
-  // Alias para manter compatibilidade com chamadas existentes
   async getSalesReport(params: ReportQueryParams): Promise<SalesReportResponse> {
     return this.obter_relatorio_vendas(params);
   }
