@@ -37,6 +37,14 @@ export async function webhookRoutes(app: FastifyInstance) {
       });
     }
 
+    if (request.invalidJson) {
+      return reply.status(422).send({
+        statusCode: 422,
+        error: 'Unprocessable Entity',
+        message: 'Corpo da requisicao nao e um JSON valido',
+      });
+    }
+
     const resultado_validacao = webhookPayloadSchema.safeParse(request.body);
 
     if (!resultado_validacao.success) {

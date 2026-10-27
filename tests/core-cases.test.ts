@@ -168,6 +168,19 @@ describe('Suite de Testes Core: Receptor de Postbacks & Relatorios', () => {
       payload: json_bruto_quebrado,
     });
     expect(resposta_quebrada.statusCode).toBe(422);
+    expect(resposta_quebrada.json().error).toBe('Unprocessable Entity');
+
+    // JSON quebrado SEM assinatura valida: a assinatura e checada primeiro -> 401
+    const resposta_quebrada_sem_assinatura = await aplicacao.inject({
+      method: 'POST',
+      url: '/webhooks/sales',
+      headers: {
+        'content-type': 'application/json',
+        'x-signature': 'abc123',
+      },
+      payload: json_bruto_quebrado,
+    });
+    expect(resposta_quebrada_sem_assinatura.statusCode).toBe(401);
   });
 
   it('5. Assinatura HMAC incorreta ou ausente retorna 401 Unauthorized', async () => {

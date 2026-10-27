@@ -11,6 +11,7 @@ import { webhookRoutes } from './routes/webhook.routes.js';
 declare module 'fastify' {
   interface FastifyRequest {
     rawBody?: Buffer;
+    invalidJson?: boolean;
   }
   interface FastifyInstance {
     metricas: Metricas;
@@ -75,9 +76,11 @@ export function buildApp(): FastifyInstance {
         }
         const parsed = JSON.parse(rawBuffer.toString('utf-8'));
         done(null, parsed);
-      } catch (err: any) {
-        err.statusCode = 422;
-        done(err, undefined);
+      } catch {
+        // JSON quebrado so e rejeitado na rota, DEPOIS da verificacao da assinatura:
+        // sem assinatura valida a resposta e sempre 401, sem revelar detalhes do parser
+        req.invalidJson = true;
+        done(null, undefined);
       }
     }
   );

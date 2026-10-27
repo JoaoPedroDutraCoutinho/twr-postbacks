@@ -40,7 +40,7 @@ Resposta esperada:
 
 | Camada | Tecnologia | Motivação |
 | :--- | :--- | :--- |
-| **Linguagem** | **TypeScript 5 (Strict Mode)** | Tipagem estática, segurança em tempo de compilação e manutenibilidade. |
+| **Linguagem** | **TypeScript 7 (Strict Mode)** | Tipagem estática, segurança em tempo de compilação e manutenibilidade. |
 | **Runtime** | **Node.js 22+** | Suporte a ES Modules nativos e alta velocidade de I/O assíncrono. |
 | **Framework HTTP** | **Fastify** | Alta performance, overhead mínimo e suporte nativo a manipulação de buffer bruto (*raw body*). |
 | **Validação** | **Zod** | Validação em runtime de payloads e query params com inferência de tipos estáticos. |
@@ -81,7 +81,7 @@ flowchart TD
 
 ### Pré-requisitos
 - Node.js 22 ou superior instalado
-- Docker & Docker Compose (opcional para rodar o PostgreSQL local)
+- Docker & Docker Compose (opcional: sobe o PostgreSQL e o Jaeger locais; sem Docker, use `USE_MEMORY_DB=true`)
 
 ### 1. Clonar e Instalar Dependências
 ```bash
@@ -102,6 +102,7 @@ Variáveis disponíveis no `.env`:
 - `WEBHOOK_SECRET`: Chave secreta compartilhada para cálculo do HMAC (`twr_webhook_secret_key_2026`)
 - `OTEL_EXPORTER_OTLP_ENDPOINT` *(opcional)*: liga o tracing OpenTelemetry e envia os traces para esse coletor (ex: `http://localhost:4318`)
 - `OTEL_SERVICE_NAME` *(opcional)*: nome do serviço nos traces (padrão: `twr-postbacks`)
+- `USE_MEMORY_DB` *(opcional)*: `true` para rodar sem PostgreSQL, guardando os eventos em memória (somem ao reiniciar). Útil para testar a API sem Docker.
 
 ### 3. Subir o Banco de Dados e o Jaeger (via Docker)
 ```bash
@@ -140,8 +141,8 @@ npm test
 1. **Evento duplicado**: Retorna HTTP 200 e conta apenas 1 venda no relatório financeiro.
 2. **20 envios concorrentes em paralelo**: Disparo simultâneo (`Promise.all`) de 20 requisições idênticas; exatamente 1 resulta em 201 e 19 em 200, validando o contrato de idempotência sob envios paralelos.
 3. **Reembolso fora de ordem**: Um evento de `sale.refunded` recebido antes da aprovação produz o mesmo resultado determinístico de faturamento líquido (`net_cents = 0`).
-4. **Payload inválido**: Payloads com campos faltantes, valores negativos ou JSON quebrado retornam HTTP 422 com detalhamento Zod.
-5. **Assinatura adulterada**: Header `X-Signature` incorreto ou ausente retorna HTTP 401 sem processar a requisição.
+4. **Payload inválido**: Payloads com campos faltantes, valores negativos ou JSON quebrado retornam HTTP 422 (com detalhamento Zod quando o JSON é válido mas viola o schema).
+5. **Assinatura adulterada**: Header `X-Signature` incorreto ou ausente retorna HTTP 401 sem processar a requisição, inclusive quando o corpo é um JSON quebrado (a assinatura é sempre verificada antes do conteúdo).
 6. **Isolamento de moedas**: Transações em `BRL` e `USD` são totalizadas em buckets próprios sem se misturar.
 
 Testes adicionais cobrem o `/health`, o agrupamento `group_by=product` e as **métricas** (`/metrics` contando webhooks `created`, `duplicate` e `unauthorized`).
@@ -220,24 +221,11 @@ node -e "const c=require('crypto'); console.log(c.createHmac('sha256','twr_webho
 ```bash
 curl -X POST http://localhost:3000/webhooks/sales \
   -H "Content-Type: application/json" \
-  -H "X-Signature: 664988e0bce62cb6eeb41dd368a44b9cb7eb2e3fc7bdf3a2fbddaaeb4185d0d1" \
-  -d '{
-    "platform": "kiwify",
-    "event_id": "evt_demo_101",
-    "event_type": "sale.approved",
-    "order_id": "ord_101",
-    "product": {
-      "id": "p1",
-      "name": "Curso TWR"
-    },
-    "currency": "BRL",
-    "amount_cents": 19700,
-    "customer": {
-      "email": "aluno@twr.com",
-      "name": "Maria Silva"
-    }
-  }'
+  -H "X-Signature: 071f23778394ffa336de319d03d23585c6d47afb8c672c41c1481a72430c0d31" \
+  -d '{"platform":"kiwify","event_id":"evt_demo_101","event_type":"sale.approved","order_id":"ord_101","product":{"id":"p1","name":"Curso TWR"},"currency":"BRL","amount_cents":19700,"customer":{"email":"aluno@twr.com"}}'
 ```
+
+> A assinatura é calculada sobre os **bytes exatos** do corpo: qualquer espaço, quebra de linha ou campo a mais gera outro hash e a resposta vira `401`. Por isso o corpo do `curl` é idêntico ao usado no comando que gera a assinatura.
 
 **Resposta de Sucesso (Primeiro envio - HTTP 201):**
 ```json
@@ -393,4 +381,4 @@ Para usar: importe a coleção e os dois environments no Postman, selecione o en
 
 ## Transparência sobre Ferramentas
 
-Conforme as melhores práticas da engenharia moderna e os conselhos do time da TWR, este projeto foi planejado arquiteturalmente e implementado com o auxílio de inteligência artificial (Google Antigravity), tendo **cada linha de código, teste automatizado, tipagem e decisão de engenharia minuciosamente revisada, validada e compreendida**.
+Conforme as melhores práticas da engenharia moderna este projeto foi planejado arquiteturalmente e implementado com o auxílio de inteligência artificial (Google Antigravity), tendo **cada linha de código, teste automatizado, tipagem e decisão de engenharia minuciosamente revisada, validada e compreendida**.

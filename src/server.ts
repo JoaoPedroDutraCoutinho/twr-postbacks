@@ -1,12 +1,13 @@
 import { buildApp } from './app.js';
 import { env } from './config/env.js';
+import { isMemoryDb } from './db/index.js';
 import { runMigrations } from './db/migrate.js';
 
 const aplicacao = buildApp();
 
 const iniciar_servidor = async () => {
   try {
-    if (process.env.NODE_ENV !== 'test') {
+    if (!isMemoryDb()) {
       try {
         await runMigrations();
       } catch (erro_migracao) {
